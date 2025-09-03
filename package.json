@@ -1,0 +1,16 @@
+{
+  "name": "microservices-project",
+  "version": "1.0.0",
+  "description": "Microservices architecture with Express.js",
+  "scripts": {
+    "install": "npm install --prefix auth_service && npm install --prefix notification_service && npm install --prefix api_gateway",
+    "dev": "concurrently \"cd auth_service && npm run dev\" \"cd notification_service && npm run dev\" \"cd api_gateway && npm run dev\"",
+    "start": "concurrently \"cd auth_service && npm start\" \"cd notification_service && npm start\" \"cd api_gateway && npm start\""
+  },
+  "keywords": ["microservices", "express", "kafka", "supabase"],
+  "author": "Your Name",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
