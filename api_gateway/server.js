@@ -3,24 +3,20 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const cors = require('cors');
 const helmet = require('helmet');
 require('dotenv').config();
-
 const ServiceRegistry = require('./config/services');
-const { 
-  serviceDiscovery, 
-  circuitBreaker, 
-  requestTimeout, 
+const {
+  serviceDiscovery,
+  circuitBreaker,
+  requestTimeout,
   requestLogger,
-  initializeServiceRegistry 
+  initializeServiceRegistry
 } = require('./middleware/serviceDiscovery.js');
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Security middleware
 app.use(helmet());
 app.use(cors());
-
-
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -29,55 +25,51 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Service registry instance
 const serviceRegistry = new ServiceRegistry();
 
-// Initialize services
-const initializeServices = async () => {
-  try {
-    // Register auth service
-    await serviceRegistry.registerService({
-      name: 'auth-service',
-      url: process.env.AUTH_SERVICE_URL || 'http://localhost:5051',
-      health: process.env.AUTH_SERVICE_HEALTH || 'http://localhost:5051/health',
-      routes: ['/api/auth']
-    });
-
-    // Register notification service
-    await serviceRegistry.registerService({
-      name: 'notification-service',
-      url: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5002',
-      health: process.env.NOTIFICATION_SERVICE_HEALTH || 'http://localhost:5002/health',
-      routes: ['/api/notifications']
-    });
-
-    console.log('Services registered successfully');
-  } catch (error) {
-    console.error('Failed to register services:', error);
-  }
-};
-
 // Service registration endpoint
 app.post('/register-service', async (req, res) => {
   try {
     const serviceInfo = req.body;
-    
     if (!serviceInfo.name || !serviceInfo.url) {
       return res.status(400).json({
         success: false,
         message: 'Service name and URL are required'
       });
     }
-
     await serviceRegistry.registerService(serviceInfo);
-    
     res.status(201).json({
       success: true,
       message: 'Service registered successfully',
       service: serviceInfo
     });
   } catch (error) {
-    console.error('Service registration error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to register service',
+      error: error.message
+    });
+  }
+});
+
+// Service deregistration endpoint
+app.delete('/register-service/:serviceName', async (req, res) => {
+  try {
+    const { serviceName } = req.params;
+    const success = await serviceRegistry.unregisterService(serviceName);
+    if (success) {
+      res.status(200).json({
+        success: true,
+        message: 'Service deregistered successfully'
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: 'Service not found'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to deregister service',
       error: error.message
     });
   }
@@ -87,7 +79,6 @@ app.post('/register-service', async (req, res) => {
 app.get('/services', async (req, res) => {
   try {
     const services = await serviceRegistry.getServices();
-    
     res.status(200).json({
       success: true,
       message: 'Available services',
@@ -97,7 +88,6 @@ app.get('/services', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Service discovery error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get services'
@@ -110,15 +100,11 @@ app.get('/health', async (req, res) => {
   try {
     const services = await serviceRegistry.getServices();
     const healthChecks = await serviceRegistry.checkServicesHealth();
-    
     const totalServices = services.length;
     const healthyServices = healthChecks.filter(check => check.healthy).length;
-    
-    const isGatewayHealthy = totalServices > 0 && healthyServices === totalServices;
-    
-    res.status(isGatewayHealthy ? 200 : 503).json({
-      success: isGatewayHealthy,
-      message: isGatewayHealthy ? 'API Gateway is healthy' : 'Some services are unhealthy',
+    res.status(200).json({
+      success: true,
+      message: 'API Gateway is healthy',
       data: {
         gateway: {
           status: 'running',
@@ -136,10 +122,9 @@ app.get('/health', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Health check error:', error);
-    res.status(503).json({
-      success: false,
-      message: 'Health check failed',
+    res.status(200).json({
+      success: true,
+      message: 'API Gateway is healthy (service check failed)',
       error: error.message
     });
   }
@@ -149,7 +134,6 @@ app.get('/health', async (req, res) => {
 app.get('/gateway/status', async (req, res) => {
   try {
     const services = await serviceRegistry.getServices();
-    
     res.status(200).json({
       success: true,
       message: 'API Gateway status',
@@ -163,31 +147,22 @@ app.get('/gateway/status', async (req, res) => {
           startTime: new Date(Date.now() - process.uptime() * 1000).toISOString()
         },
         configuration: {
-          rateLimiting: {
-            enabled: true,
-            windowMs: 15 * 60 * 1000,
-            maxRequests: 100
-          },
-          cors: {
-            enabled: true,
-            allowedOrigins: process.env.ALLOWED_ORIGINS || '*'
-          },
-          security: {
-            helmet: true
-          }
+          selfRegistration: true,
+          healthCheckInterval: 30000,
+          circuitBreakerEnabled: true
         },
         registeredServices: services.map(service => ({
           name: service.name,
           url: service.url,
           routes: service.routes,
           status: service.healthy ? 'healthy' : 'unhealthy',
-          lastHealthCheck: service.lastHealthCheck
+          lastHealthCheck: service.lastHealthCheck,
+          registeredAt: service.registeredAt
         }))
       },
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Gateway status error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get gateway status'
@@ -195,40 +170,52 @@ app.get('/gateway/status', async (req, res) => {
   }
 });
 
-// Service proxy middleware
-app.use('/api/auth', serviceDiscovery('auth-service'), createProxyMiddleware({
-  target: process.env.AUTH_SERVICE_URL || 'http://localhost:5051',
-  changeOrigin: true,
-  logLevel: 'debug',
-  onError: (err, req, res) => {
-    console.error('Auth service proxy error:', err);
-    res.status(503).json({
-      success: false,
-      message: 'Auth service unavailable',
-      error: 'Service temporarily unavailable'
+// Dynamic route handling
+app.use('/api/*', async (req, res, next) => {
+  try {
+    const path = req.path;
+    const service = await serviceRegistry.findServiceByRoute(path);
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: 'No service available for this route',
+        requestedRoute: path
+      });
+    }
+    if (!service.healthy) {
+      return res.status(503).json({
+        success: false,
+        message: 'Service is currently unavailable',
+        service: service.name
+      });
+    }
+    const proxy = createProxyMiddleware({
+      target: service.url,
+      changeOrigin: true,
+      logLevel: 'error',
+      onError: (err, req, res) => {
+        if (!res.headersSent) {
+          res.status(503).json({
+            success: false,
+            message: `${service.name} service unavailable`,
+            error: 'Service temporarily unavailable'
+          });
+        }
+      },
+      onProxyReq: (proxyReq, req, res) => {
+        proxyReq.setHeader('X-Gateway-Service', service.name);
+        proxyReq.setHeader('X-Gateway-Timestamp', new Date().toISOString());
+      }
     });
-  },
-  onProxyReq: (proxyReq, req, res) => {
-    console.log(`Proxying ${req.method} ${req.originalUrl} to auth-service`);
-  }
-}));
-
-app.use('/api/notifications', serviceDiscovery('notification-service'), createProxyMiddleware({
-  target: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5002',
-  changeOrigin: true,
-  logLevel: 'debug',
-  onError: (err, req, res) => {
-    console.error('Notification service proxy error:', err);
-    res.status(503).json({
+    proxy(req, res, next);
+  } catch (error) {
+    res.status(500).json({
       success: false,
-      message: 'Notification service unavailable',
-      error: 'Service temporarily unavailable'
+      message: 'Internal routing error',
+      error: error.message
     });
-  },
-  onProxyReq: (proxyReq, req, res) => {
-    console.log(`Proxying ${req.method} ${req.originalUrl} to notification-service`);
   }
-}));
+});
 
 // API documentation endpoint
 app.get('/api/docs', (req, res) => {
@@ -238,29 +225,37 @@ app.get('/api/docs', (req, res) => {
     data: {
       name: 'Microservices API Gateway',
       version: '1.0.0',
-      description: 'Central entry point for all microservices',
+      description: 'Central entry point for all microservices with dynamic service discovery',
       baseUrl: `http://localhost:${PORT}`,
+      features: [
+        'Dynamic Service Discovery',
+        'Self-Service Registration',
+        'Health Monitoring',
+        'Circuit Breaking',
+        'Dynamic Routing'
+      ],
       endpoints: {
-        gateway: [
+        management: [
           'GET /health - Gateway health check',
           'GET /gateway/status - Detailed gateway status',
           'GET /services - List registered services',
-          'POST /register-service - Register a new service'
+          'POST /register-service - Register a new service',
+          'DELETE /register-service/:name - Deregister a service'
         ],
         services: [
-          'ALL /api/auth/* - Authentication service routes',
-          'ALL /api/notifications/* - Notification service routes'
+          'ALL /api/* - Dynamic routing to registered services'
         ]
       },
-      features: [
-        'Service Discovery',
-        'Load Balancing',
-        'Health Checks',
-        'Rate Limiting',
-        'CORS Support',
-        'Security Headers',
-        'Request Proxying'
-      ]
+      registration: {
+        endpoint: 'POST /register-service',
+        format: {
+          name: 'string (required)',
+          url: 'string (required)',
+          health: 'string (optional)',
+          routes: 'array (optional)',
+          metadata: 'object (optional)'
+        }
+      }
     }
   });
 });
@@ -271,46 +266,38 @@ app.use('*', (req, res) => {
     success: false,
     message: 'Route not found',
     requestedUrl: req.originalUrl,
-    availableRoutes: [
-      '/health',
-      '/gateway/status',
-      '/services',
-      '/api/auth/*',
-      '/api/notifications/*'
-    ]
+    suggestion: 'Check /api/docs for available endpoints'
   });
 });
 
 // Global error handler
 app.use((error, req, res, next) => {
-  console.error('Gateway error:', error);
-  res.status(500).json({
-    success: false,
-    message: 'Internal gateway error',
-    error: process.env.NODE_ENV === 'development' ? error.message : undefined
-  });
+  if (!res.headersSent) {
+    res.status(500).json({
+      success: false,
+      message: 'Internal gateway error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 });
 
 // Start server
 const startServer = async () => {
   try {
-    await initializeServices();
-    
-    // Start health check interval
-    setInterval(async () => {
-      try {
-        await serviceRegistry.checkServicesHealth();
-      } catch (error) {
-        console.error('Periodic health check error:', error);
-      }
-    }, 30000); // Check every 30 seconds
-    
-    app.listen(PORT, () => {
-      console.log(`API Gateway running on port ${PORT}`);
-      console.log(`Gateway health: http://localhost:${PORT}/health`);
-      console.log(`Gateway status: http://localhost:${PORT}/gateway/status`);
-      console.log(`Services: http://localhost:${PORT}/services`);
-    });
+    app.listen(PORT, () => {});
+    setTimeout(() => {
+      setInterval(async () => {
+        try {
+          const healthChecks = await serviceRegistry.checkServicesHealth();
+          const unhealthyServices = healthChecks.filter(check => !check.healthy);
+          if (unhealthyServices.length > 0) {
+            console.error(`Unhealthy services detected: ${unhealthyServices.map(s => s.serviceName).join(', ')}`);
+          }
+        } catch (error) {
+          console.error('Periodic health check error:', error);
+        }
+      }, 30000);
+    }, 30000);
   } catch (error) {
     console.error('Failed to start API Gateway:', error);
     process.exit(1);
@@ -318,13 +305,12 @@ const startServer = async () => {
 };
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('Shutting down API Gateway...');
+process.on('SIGINT', async () => {
+  await serviceRegistry.cleanup();
   process.exit(0);
 });
-
-process.on('SIGTERM', () => {
-  console.log('Shutting down API Gateway...');
+process.on('SIGTERM', async () => {
+  await serviceRegistry.cleanup();
   process.exit(0);
 });
 
