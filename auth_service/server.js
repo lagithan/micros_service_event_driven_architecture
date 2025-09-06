@@ -4,6 +4,8 @@ const axios = require('axios');
 require('dotenv').config();
 
 const authRoutes = require('./routes/authRoutes');
+const clientRoutes = require('./routes/clientRoutes');
+const driverRoutes = require('./routes/driverRoutes');
 const { connectDatabase } = require('./config/database');
 const { initKafka } = require('./config/kafka');
 
@@ -52,12 +54,17 @@ app.get('/info', (req, res) => {
       health: 'GET /health',
       info: 'GET /info',
       auth: {
-        register: 'POST /api/auth/register',
         login: 'POST /api/auth/login',
         logout: 'POST /api/auth/logout',
-        profile: 'GET /api/auth/profile',
-        updateProfile: 'PUT /api/auth/profile',
         check: 'GET /api/auth/check'
+      },
+      client: {
+        register: 'POST /api/client/register',
+        profile: 'POST /api/client/profile'
+      },
+      driver: {
+        register: 'POST /api/driver/register',
+        profile: 'POST /api/driver/profile'
       }
     },
     timestamp: new Date().toISOString()
@@ -65,6 +72,8 @@ app.get('/info', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/client', clientRoutes);
+app.use('/api/driver', driverRoutes);
 
 
 // Self-registration with Express API Gateway
@@ -78,7 +87,7 @@ const selfRegister = async (maxRetries = 5, delayMs = 3000) => {
         name: SERVICE_NAME,
         url: `http://localhost:${PORT}`,
         health: `http://localhost:${PORT}/health`,
-        routes: ['api/auth'], // FIXED: Removed leading slash for consistent matching
+        routes: ['api/auth', 'api/client', 'api/driver'], // FIXED: Removed leading slash for consistent matching
         metadata: {
           version: '1.0.0',
           description: 'Authentication and user management service',
@@ -93,8 +102,8 @@ const selfRegister = async (maxRetries = 5, delayMs = 3000) => {
           registeredAt: new Date().toISOString(),
           registeredBy: 'self-registration',
           acceptsAllMethods: true, // Accepts ALL HTTP methods (GET, POST, PUT, DELETE, etc.)
-          routePattern: '/api/auth/*', // Handles all sub-paths under /api/auth/
-          note: 'This service dynamically handles all requests to /api/auth/* with any HTTP method'
+          routePattern: '/api/{auth,client,driver}/*', // Handles all sub-paths under /api/auth/, /api/client/, /api/driver/
+          note: 'This service dynamically handles all requests to /api/auth/*, /api/client/*, /api/driver/* with any HTTP method'
         }
       };
 
@@ -117,7 +126,7 @@ const selfRegister = async (maxRetries = 5, delayMs = 3000) => {
 
       if (response.status === 201) {
         console.log(`✅ Successfully registered with Express API Gateway!`);
-        console.log(`🔗 Service handles: ${GATEWAY_URL}/api/auth/* (ALL methods)`);
+        console.log(`🔗 Service handles: ${GATEWAY_URL}/api/{auth,client,driver}/* (ALL methods)`);
         console.log(`📍 Path mapping: /api/auth/* -> http://localhost:${PORT}/api/auth/*`);
         console.log(`🔧 Configuration: preservePath=true, removePrefix=false`);
         console.log(`📋 Response:`, response.data);

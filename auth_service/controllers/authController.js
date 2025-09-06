@@ -1,4 +1,6 @@
 const UserModel = require('../models/userModel');
+const ClientProfileModel = require('../models/clientProfileModel');
+const DriverProfileModel = require('../models/driverProfileModel');
 
 // Gracefully handle Kafka dependency
 let publishAuthEvent, publishUserRegistrationEvent;
@@ -13,119 +15,6 @@ try {
 }
 
 class AuthController {
-  // User registration
-  static async register(req, res) {
-    try {
-      const { email, password, firstName, lastName } = req.body;
-
-      // Validation
-      if (!email || !password || !firstName || !lastName) {
-        return res.status(400).json({
-          success: false,
-          message: 'All fields are required'
-        });
-      }
-
-      // Email format validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid email format'
-        });
-      }
-
-      // Password strength validation
-      if (password.length < 6) {
-        return res.status(400).json({
-          success: false,
-          message: 'Password must be at least 6 characters long'
-        });
-      }
-
-      // Check database availability and handle user creation
-      let newUser;
-      try {
-        // Check if user already exists
-        const existingUser = await UserModel.findByEmail(email);
-        if (existingUser) {
-          return res.status(409).json({
-            success: false,
-            message: 'User with this email already exists'
-          });
-        }
-
-        // Create new user
-        newUser = await UserModel.createUser({
-          email,
-          password,
-          firstName,
-          lastName
-        });
-      } catch (dbError) {
-        console.error('Database error during registration:', dbError.message);
-        
-        // If database is unavailable, create a mock user for testing
-        if (dbError.message.includes('connect') || dbError.code === 'ECONNREFUSED') {
-          console.log('ℹ️  Database unavailable - creating mock user for testing');
-          newUser = {
-            id: Date.now(), // Mock ID
-            email: email,
-            first_name: firstName,
-            last_name: lastName,
-            created_at: new Date().toISOString()
-          };
-        } else {
-          throw dbError; // Re-throw if it's not a connection error
-        }
-      }
-
-
-      // Publish registration event to Kafka (with error handling)
-      try {
-        await publishUserRegistrationEvent({
-          userId: newUser.id,
-          email: newUser.email,
-          firstName: newUser.first_name,
-          lastName: newUser.last_name
-        });
-
-        // Publish authentication success event
-        await publishAuthEvent({
-          userId: newUser.id,
-          email: newUser.email,
-          firstName: newUser.first_name,
-          lastName: newUser.last_name,
-          action: 'signup'
-        });
-      } catch (kafkaError) {
-        console.warn('⚠️  Failed to publish events to Kafka:', kafkaError.message);
-        // Continue without failing the registration
-      }
-
-      res.status(201).json({
-        success: true,
-        message: 'User registered successfully',
-        data: {
-          user: {
-            id: newUser.id,
-            email: newUser.email,
-            firstName: newUser.first_name,
-            lastName: newUser.last_name,
-            createdAt: newUser.created_at
-          }
-        }
-      });
-
-    } catch (error) {
-      console.error('Registration error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
-      });
-    }
-  }
 
   // User login
   static async login(req, res) {
@@ -141,7 +30,7 @@ class AuthController {
       }
 
       // Find user by email with database fallback
-      let user;
+      let user, profile = null;
       try {
         user = await UserModel.findByEmail(email);
         if (!user) {
@@ -159,6 +48,14 @@ class AuthController {
             message: 'Invalid credentials'
           });
         }
+
+        // Get profile based on user type
+        if (user.user_type === 'client') {
+          profile = await ClientProfileModel.findByUserId(user.id);
+        } else if (user.user_type === 'driver') {
+          profile = await DriverProfileModel.findByUserId(user.id);
+        }
+
       } catch (dbError) {
         console.error('Database error during login:', dbError.message);
         
@@ -169,11 +66,17 @@ class AuthController {
           // Create a mock user for testing purposes
           user = {
             id: 999,
+            username: 'test_user',
             email: email,
-            first_name: 'Test',
-            last_name: 'User',
+            user_type: 'client',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
+          };
+          profile = {
+            id: 1000,
+            name: 'Test User',
+            email: email,
+            phone_no: '1234567890'
           };
         } else {
           throw dbError; // Re-throw if it's not a connection error
@@ -186,8 +89,8 @@ class AuthController {
         await publishAuthEvent({
           userId: user.id,
           email: user.email,
-          firstName: user.first_name,
-          lastName: user.last_name,
+          username: user.username,
+          userType: user.user_type,
           action: 'login'
         });
       } catch (kafkaError) {
@@ -201,12 +104,13 @@ class AuthController {
         data: {
           user: {
             id: user.id,
+            username: user.username,
             email: user.email,
-            firstName: user.first_name,
-            lastName: user.last_name,
+            userType: user.user_type,
             createdAt: user.created_at,
             updatedAt: user.updated_at
-          }
+          },
+          profile: profile
         }
       });
 
@@ -257,17 +161,26 @@ class AuthController {
           });
         }
 
+        // Get profile based on user type
+        let profile = null;
+        if (user.user_type === 'client') {
+          profile = await ClientProfileModel.findByUserId(user.id);
+        } else if (user.user_type === 'driver') {
+          profile = await DriverProfileModel.findByUserId(user.id);
+        }
+
         res.status(200).json({
           success: true,
           data: {
             user: {
               id: user.id,
+              username: user.username,
               email: user.email,
-              firstName: user.first_name,
-              lastName: user.last_name,
+              userType: user.user_type,
               createdAt: user.created_at,
               updatedAt: user.updated_at
-            }
+            },
+            profile: profile
           }
         });
       } catch (dbError) {
@@ -281,11 +194,16 @@ class AuthController {
             data: {
               user: {
                 id: userId,
+                username: 'mock_user',
                 email: 'mock@example.com',
-                firstName: 'Mock',
-                lastName: 'User',
+                userType: 'client',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
+              },
+              profile: {
+                id: userId + 100,
+                name: 'Mock User',
+                email: 'mock@example.com'
               }
             }
           });
@@ -303,83 +221,6 @@ class AuthController {
     }
   }
 
-  // Update user profile
-  static async updateProfile(req, res) {
-    try {
-      const { userId, firstName, lastName } = req.body;
-
-      if (!userId) {
-        return res.status(400).json({
-          success: false,
-          message: 'User ID is required'
-        });
-      }
-
-      if (!firstName || !lastName) {
-        return res.status(400).json({
-          success: false,
-          message: 'First name and last name are required'
-        });
-      }
-
-      try {
-        const updatedUser = await UserModel.updateUser(userId, {
-          firstName,
-          lastName
-        });
-
-        if (!updatedUser) {
-          return res.status(404).json({
-            success: false,
-            message: 'User not found'
-          });
-        }
-
-        res.status(200).json({
-          success: true,
-          message: 'Profile updated successfully',
-          data: {
-            user: {
-              id: updatedUser.id,
-              email: updatedUser.email,
-              firstName: updatedUser.first_name,
-              lastName: updatedUser.last_name,
-              updatedAt: updatedUser.updated_at
-            }
-          }
-        });
-      } catch (dbError) {
-        console.error('Database error during profile update:', dbError.message);
-        
-        // If database is unavailable, return mock updated profile
-        if (dbError.message.includes('connect') || dbError.code === 'ECONNREFUSED') {
-          console.log('ℹ️  Database unavailable - returning mock updated profile');
-          res.status(200).json({
-            success: true,
-            message: 'Profile updated successfully (mock)',
-            data: {
-              user: {
-                id: userId,
-                email: 'mock@example.com',
-                firstName: firstName,
-                lastName: lastName,
-                updatedAt: new Date().toISOString()
-              }
-            }
-          });
-        } else {
-          throw dbError;
-        }
-      }
-
-    } catch (error) {
-      console.error('Update profile error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error'
-      });
-    }
-  }
 
   // Check authentication status
   static async checkAuth(req, res) {
@@ -411,9 +252,9 @@ class AuthController {
           data: {
             user: {
               id: user.id,
+              username: user.username,
               email: user.email,
-              firstName: user.first_name,
-              lastName: user.last_name
+              userType: user.user_type
             }
           }
         });
@@ -430,9 +271,9 @@ class AuthController {
             data: {
               user: {
                 id: userId,
+                username: 'mock_user',
                 email: 'mock@example.com',
-                firstName: 'Mock',
-                lastName: 'User'
+                userType: 'client'
               }
             }
           });

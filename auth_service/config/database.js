@@ -18,20 +18,51 @@ const connectDatabase = async () => {
     const client = await pool.connect();
     console.log('Connected to PostgreSQL database');
     
-    // Create users table if it doesn't exist
+    // Create users table if it doesn't exist (common table for both clients and drivers)
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
-        first_name VARCHAR(100),
-        last_name VARCHAR(100),
+        user_type VARCHAR(20) NOT NULL CHECK (user_type IN ('client', 'driver')),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     
-    console.log('Users table ready');
+    // Create client_profiles table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS client_profiles (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        phone_no VARCHAR(20),
+        business_type VARCHAR(100),
+        city VARCHAR(100),
+        address TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Create driver_profiles table  
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS driver_profiles (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        full_name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        phone_no VARCHAR(20),
+        city VARCHAR(100),
+        address TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    console.log('All tables ready (users, client_profiles, driver_profiles)');
     client.release();
   } catch (error) {
     console.error('Database connection error:', error);

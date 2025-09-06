@@ -4,7 +4,7 @@ const { query, transaction } = require('../config/database');
 class UserModel {
   // Create a new user
   static async createUser(userData) {
-    const { email, password, firstName, lastName } = userData;
+    const { username, email, password, userType } = userData;
     
     try {
       // Hash password
@@ -12,18 +12,18 @@ class UserModel {
       const hashedPassword = await bcrypt.hash(password, saltRounds);
       
       const queryText = `
-        INSERT INTO users (email, password, first_name, last_name, created_at, updated_at)
+        INSERT INTO users (username, email, password, user_type, created_at, updated_at)
         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        RETURNING id, email, first_name, last_name, created_at
+        RETURNING id, username, email, user_type, created_at
       `;
       
-      const values = [email.toLowerCase(), hashedPassword, firstName, lastName];
+      const values = [username, email.toLowerCase(), hashedPassword, userType];
       const result = await query(queryText, values);
       
       return result.rows[0];
     } catch (error) {
       if (error.code === '23505') { // Unique constraint violation
-        throw new Error('Email already exists');
+        throw new Error('Email or username already exists');
       }
       throw error;
     }
@@ -33,7 +33,7 @@ class UserModel {
   static async findByEmail(email) {
     try {
       const queryText = `
-        SELECT id, email, password, first_name, last_name, created_at, updated_at
+        SELECT id, username, email, password, user_type, created_at, updated_at
         FROM users 
         WHERE email = $1
       `;
@@ -49,7 +49,7 @@ class UserModel {
   static async findById(userId) {
     try {
       const queryText = `
-        SELECT id, email, first_name, last_name, created_at, updated_at
+        SELECT id, username, email, user_type, created_at, updated_at
         FROM users 
         WHERE id = $1
       `;
