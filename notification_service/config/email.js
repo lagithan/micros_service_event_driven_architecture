@@ -11,8 +11,8 @@ const initEmailService = async () => {
       port: 587,
       secure: false, // true for 465, false for other ports
       auth: {
-        user: process.env.GMAIL_USER, // Your Gmail address
-        pass: process.env.GMAIL_APP_PASSWORD, // Your Gmail App Password (not regular password)
+        user: "swifttrackwebsite@gmail.com", // Your Gmail address
+        pass: "huum zurb ixlf mrij", // Your Gmail App Password (not regular password)
       },
       tls: {
         rejectUnauthorized: false
@@ -38,7 +38,7 @@ const sendEmail = async (mailOptions) => {
     }
 
     const defaultOptions = {
-      from: `"${process.env.SENDER_NAME || 'Your App'}" <${process.env.GMAIL_USER}>`,
+      from: "Swift Track",
     };
 
     const finalOptions = { ...defaultOptions, ...mailOptions };
@@ -69,11 +69,11 @@ const sendWelcomeEmail = async (userData) => {
   
   const mailOptions = {
     to: email,
-    subject: 'Welcome to Our Platform!',
+    subject: 'Welcome to Swift Track!',
     html: `
       <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
-          <h1 style="color: white; margin: 0;">Welcome to Our Platform!</h1>
+          <h1 style="color: white; margin: 0;">Welcome to Swift Track!</h1>
         </div>
         
         <div style="padding: 30px; background-color: #f9f9f9;">
@@ -97,30 +97,20 @@ const sendWelcomeEmail = async (userData) => {
             feel free to reach out to our support team.
           </p>
           
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${process.env.APP_URL || 'http://localhost:3000'}" 
-               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                      color: white; 
-                      padding: 12px 30px; 
-                      text-decoration: none; 
-                      border-radius: 25px; 
-                      font-weight: bold;">
-              Get Started
-            </a>
-          </div>
+          
         </div>
         
         <div style="background-color: #333; padding: 20px; text-align: center;">
           <p style="color: #999; margin: 0; font-size: 14px;">
             Best regards,<br>
-            The ${process.env.APP_NAME || 'Our Platform'} Team
+            The ${process.env.APP_NAME || 'Swift Track'} Team
           </p>
         </div>
       </div>
     `,
     text: `
-      Welcome to Our Platform!
-      
+      Welcome to Swift Track!
+
       Hello ${firstName} ${lastName}!
       
       Thank you for joining our platform. We're excited to have you on board!
@@ -134,7 +124,7 @@ const sendWelcomeEmail = async (userData) => {
       feel free to reach out to our support team.
       
       Best regards,
-      The ${process.env.APP_NAME || 'Our Platform'} Team
+      The ${process.env.APP_NAME || 'Swift Track'} Team
     `
   };
 
@@ -184,7 +174,7 @@ const sendLoginNotificationEmail = async (userData) => {
         <div style="background-color: #333; padding: 20px; text-align: center;">
           <p style="color: #999; margin: 0; font-size: 14px;">
             Best regards,<br>
-            The ${process.env.APP_NAME || 'Our Platform'} Security Team
+            The ${process.env.APP_NAME || 'Swift Track'} Security Team
           </p>
         </div>
       </div>
@@ -206,7 +196,7 @@ const sendLoginNotificationEmail = async (userData) => {
       Security Tip: Always log out from shared devices and use strong, unique passwords.
       
       Best regards,
-      The ${process.env.APP_NAME || 'Our Platform'} Security Team
+      The ${process.env.APP_NAME || 'Swift Track'} Security Team
     `
   };
 

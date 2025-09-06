@@ -3,16 +3,6 @@ const AuthController = require('../controllers/authController');
 
 const router = express.Router();
 
-// Authentication middleware
-const requireAuth = (req, res, next) => {
-  if (!req.session.userId) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required'
-    });
-  }
-  next();
-};
 
 
 // Input validation middleware
@@ -80,13 +70,13 @@ const validateLogin = (req, res, next) => {
 router.post('/register', validateRegistration, AuthController.register);
 router.post('/login', validateLogin, AuthController.login);
 
-// Protected routes
-router.post('/logout', requireAuth, AuthController.logout);
-router.get('/profile', requireAuth, AuthController.getProfile);
-router.put('/profile', requireAuth, AuthController.updateProfile);
+// Routes (no authentication required - stateless)
+router.post('/logout', AuthController.logout);
+router.post('/profile', AuthController.getProfile);
+router.put('/profile', AuthController.updateProfile);
 
 // Check authentication status
-router.get('/check', AuthController.checkAuth);
+router.post('/check', AuthController.checkAuth);
 
 // Health check for this specific route group
 router.get('/health', (req, res) => {
@@ -95,15 +85,13 @@ router.get('/health', (req, res) => {
     message: 'Auth routes are healthy',
     service: 'auth-service',
     routes: {
-      public: [
+      available: [
         'POST /api/auth/register',
         'POST /api/auth/login',
-        'GET /api/auth/check'
-      ],
-      protected: [
         'POST /api/auth/logout',
-        'GET /api/auth/profile',
-        'PUT /api/auth/profile'
+        'POST /api/auth/profile',
+        'PUT /api/auth/profile',
+        'POST /api/auth/check'
       ]
     },
     timestamp: new Date().toISOString()
