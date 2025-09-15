@@ -1,69 +1,195 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Package, CheckCircle, User, Truck } from "lucide-react";
+import { Package, CheckCircle, User, Truck, RefreshCw, Loader2 } from "lucide-react";
 import DeliveryCard from "@/components/DeliveryCard";
 import StatusBadge from "@/components/StatusBadge";
 import ProofOfDeliveryModal from "@/components/ProofOfDeliveryModal";
 import { useToast } from "@/hooks/use-toast";
+import { DeliveryService, TokenManager, DeliveryOrder } from "@/lib/api";
 
 interface Delivery {
   id: string;
-  customerName: string;
-  address: string;
-  phone: string;
+  orderId: string;
+  customerName?: string;
+  address?: string;
+  phone?: string;
   status: "select" | "picking_up" | "picked_up" | "delivering" | "delivered";
   estimatedTime?: string;
-  items: { name: string; quantity: number }[];
+  items?: { name: string; quantity: number }[];
   notes?: string;
+  deliveryPersonId?: string;
+  deliveryPersonName?: string;
+  pickupAddress?: string;
+  deliveryAddress?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
+
+// Helper function to map backend status to frontend status
+const mapDeliveryStatus = (backendStatus: string): "select" | "picking_up" | "picked_up" | "delivering" | "delivered" => {
+  switch (backendStatus) {
+    case 'Picking':
+      return 'picking_up';
+    case 'PickedUp':
+      return 'picked_up';
+    case 'Delivering':
+      return 'delivering';
+    case 'Delivered':
+      return 'delivered';
+    default:
+      return 'select';
+  }
+};
+
+// Helper function to map frontend status to backend status
+const mapToBackendStatus = (frontendStatus: string): 'Picking' | 'PickedUp' | 'Delivering' | 'Delivered' => {
+  switch (frontendStatus) {
+    case 'picking_up':
+      return 'Picking';
+    case 'picked_up':
+      return 'PickedUp';
+    case 'delivering':
+      return 'Delivering';
+    case 'delivered':
+      return 'Delivered';
+    default:
+      return 'Picking';
+  }
+};
 
 const Dashboard = () => {
   const { toast } = useToast();
-  const driverName = localStorage.getItem("driverName") || "John Driver";
+  const navigate = useNavigate();
+  const driver = TokenManager.getDriver();
+  const driverName = driver?.fullName || "Driver";
   
-  const [deliveries, setDeliveries] = useState<Delivery[]>([
-    {
-      id: "ORD001",
-      customerName: "Alice Johnson",
-      address: "123 Main St, Apt 4B, New York, NY 10001",
-      phone: "+1234567890",
-      status: "select",
-      estimatedTime: "30 mins",
-      items: [
-        { name: "Pizza Margherita", quantity: 1 },
-        { name: "Coca Cola", quantity: 2 }
-      ],
-      notes: "Ring doorbell twice"
-    },
-    {
-      id: "ORD002", 
-      customerName: "Bob Smith",
-      address: "456 Oak Ave, Brooklyn, NY 11201",
-      phone: "+1987654321",
-      status: "select",
-      estimatedTime: "25 mins",
-      items: [
-        { name: "Burger Combo", quantity: 1 }
-      ]
-    },
-    {
-      id: "ORD003",
-      customerName: "Carol Davis",
-      address: "789 Pine Rd, Queens, NY 11355",
-      phone: "+1122334455",
-      status: "delivered",
-      items: [
-        { name: "Sushi Set", quantity: 1 },
-        { name: "Green Tea", quantity: 1 }
-      ]
-    }
-  ]);
-
-  const [proofModalOpen, setProofModalOpen] = useState(false);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
+  const [proofModalOpen, setProofModalOpen] = useState(false);
+
+  // Check authentication
+  useEffect(() => {
+    if (!TokenManager.isAuthenticated()) {
+      navigate('/signin');
+      return;
+    }
+  }, [navigate]);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('Dashboard mounted');
+    console.log('Is authenticated:', TokenManager.isAuthenticated());
+    console.log('Driver data:', TokenManager.getDriver());
+    console.log('Deliveries:', deliveries);
+    console.log('Is loading:', isLoading);
+  }, [deliveries, isLoading]);
+
+  // Temporary logout function for testing
+  const handleLogout = () => {
+    TokenManager.clearToken();
+    navigate('/signin');
+  };
+
+  // Fetch deliveries from API
+  const fetchDeliveries = useCallback(async () => {
+    try {
+      const response = await DeliveryService.getMyDeliveries();
+      
+      if (response.success && Array.isArray(response.data)) {
+        // Transform backend delivery data to frontend format
+        const transformedDeliveries: Delivery[] = (response.data as DeliveryOrder[]).map(delivery => ({
+          id: delivery.orderId,
+          orderId: delivery.orderId,
+          customerName: delivery.customerName || "Customer",
+          address: delivery.deliveryAddress || "Address not provided",
+          phone: delivery.customerPhone || "",
+          status: mapDeliveryStatus(delivery.deliveryStatus),
+          estimatedTime: delivery.estimatedDeliveryTime,
+          items: delivery.items || [],
+          notes: delivery.notes,
+          deliveryPersonId: delivery.deliveryPersonId,
+          deliveryPersonName: delivery.deliveryPersonName,
+          pickupAddress: delivery.pickupAddress,
+          deliveryAddress: delivery.deliveryAddress,
+          createdAt: delivery.createdAt,
+          updatedAt: delivery.updatedAt
+        }));
+        
+        setDeliveries(transformedDeliveries);
+      } else if (response.success && !Array.isArray(response.data)) {
+        // Handle single delivery response
+        const singleDelivery = response.data as DeliveryOrder;
+        const transformedDelivery: Delivery = {
+          id: singleDelivery.orderId,
+          orderId: singleDelivery.orderId,
+          customerName: singleDelivery.customerName || "Customer",
+          address: singleDelivery.deliveryAddress || "Address not provided",
+          phone: singleDelivery.customerPhone || "",
+          status: mapDeliveryStatus(singleDelivery.deliveryStatus),
+          estimatedTime: singleDelivery.estimatedDeliveryTime,
+          items: singleDelivery.items || [],
+          notes: singleDelivery.notes,
+          deliveryPersonId: singleDelivery.deliveryPersonId,
+          deliveryPersonName: singleDelivery.deliveryPersonName,
+          pickupAddress: singleDelivery.pickupAddress,
+          deliveryAddress: singleDelivery.deliveryAddress,
+          createdAt: singleDelivery.createdAt,
+          updatedAt: singleDelivery.updatedAt
+        };
+        
+        setDeliveries([transformedDelivery]);
+      } else {
+        // No deliveries or error
+        setDeliveries([]);
+        if (!response.success) {
+          toast({
+            title: "Error",
+            description: response.message || "Failed to load deliveries",
+            variant: "destructive"
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching deliveries:', error);
+      toast({
+        title: "Connection Error",
+        description: "Unable to load deliveries. Please try again.",
+        variant: "destructive"
+      });
+      // Set some mock data if API fails for development
+      setDeliveries([
+        {
+          id: "MOCK001",
+          orderId: "MOCK001",
+          customerName: "Sample Customer",
+          address: "123 Sample Street, City",
+          phone: "+1234567890",
+          status: "select",
+          estimatedTime: "30 mins",
+          items: [{ name: "Sample Item", quantity: 1 }],
+          notes: "This is mock data - API connection failed"
+        }
+      ]);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [toast]);
+
+  // Fetch deliveries on mount
+  useEffect(() => {
+    fetchDeliveries();
+  }, [fetchDeliveries]);
+
+  const refreshDeliveries = async () => {
+    setIsRefreshing(true);
+    await fetchDeliveries();
+  };
 
   const selectDeliveries = deliveries.filter(d => d.status === "select");
   const pickingUpDeliveries = deliveries.filter(d => d.status === "picking_up");
@@ -71,27 +197,58 @@ const Dashboard = () => {
   const deliveringDeliveries = deliveries.filter(d => d.status === "delivering");
   const completedToday = deliveries.filter(d => d.status === "delivered").length;
 
-  const updateDeliveryStatus = (deliveryId: string, status: Delivery["status"]) => {
-    setDeliveries(prev =>
-      prev.map(d =>
-        d.id === deliveryId ? { ...d, status } : d
-      )
-    );
+  const updateDeliveryStatus = async (deliveryId: string, status: Delivery["status"]) => {
+    try {
+      const backendStatus = mapToBackendStatus(status);
+      const response = await DeliveryService.updateStatus(deliveryId, backendStatus);
+      
+      if (response.success) {
+        // Update local state
+        setDeliveries(prev =>
+          prev.map(d =>
+            d.id === deliveryId ? { ...d, status } : d
+          )
+        );
+        
+        // Success message based on status
+        const statusMessages = {
+          picking_up: "Ready for pickup! Go to restaurant to pick up the order.",
+          picked_up: "Order picked up! Now go for delivery.",
+          delivering: "Delivering! En route to customer.",
+          delivered: "Order delivered successfully!"
+        };
+        
+        toast({ 
+          title: "Status Updated!", 
+          description: statusMessages[status] || "Status updated successfully"
+        });
+      } else {
+        toast({
+          title: "Update Failed",
+          description: response.message || "Failed to update delivery status",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Connection Error",
+        description: "Unable to update status. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleSelectForPickup = (deliveryId: string) => {
     updateDeliveryStatus(deliveryId, "picking_up");
-    toast({ title: "Ready for pickup!", description: "Go to restaurant to pick up the order." });
   };
 
   const handlePickedUp = (deliveryId: string) => {
     updateDeliveryStatus(deliveryId, "picked_up");
-    toast({ title: "Order picked up!", description: "Now go for delivery." });
   };
 
   const handleGoForDelivery = (deliveryId: string) => {
     updateDeliveryStatus(deliveryId, "delivering");
-    toast({ title: "Delivering!", description: "En route to customer." });
   };
 
   const handleMarkDelivered = (delivery: Delivery) => {
@@ -102,10 +259,21 @@ const Dashboard = () => {
   const confirmDelivery = () => {
     if (selectedDelivery) {
       updateDeliveryStatus(selectedDelivery.id, "delivered");
-      toast({ title: "Delivery confirmed!", description: `Successfully delivered order ${selectedDelivery.id}` });
+      setProofModalOpen(false);
+      setSelectedDelivery(null);
     }
-    setSelectedDelivery(null);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+          <p className="text-muted-foreground">Loading your deliveries...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -122,11 +290,24 @@ const Dashboard = () => {
                 <p className="text-sm text-muted-foreground">Welcome, {driverName}</p>
               </div>
             </div>
-            <Link to="/profile">
-              <Button variant="outline" size="icon">
-                <User className="h-4 w-4" />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshDeliveries}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               </Button>
-            </Link>
+              <Link to="/profile">
+                <Button variant="outline" size="icon">
+                  <User className="h-4 w-4" />
+                </Button>
+              </Link>
+              {/* <Button variant="outline" size="sm" onClick={handleLogout}>
+                Logout
+              </Button> */}
+            </div>
           </div>
         </div>
       </header>

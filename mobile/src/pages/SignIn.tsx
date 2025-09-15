@@ -4,16 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Truck, Mail, Lock } from "lucide-react";
+import { Truck, Mail, Lock, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AuthService } from "@/lib/api";
 
 const SignIn = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleSignIn = (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Simple validation
@@ -26,16 +28,46 @@ const SignIn = () => {
       return;
     }
 
-    // Mock authentication - in real app, you'd call an API
-    localStorage.setItem("isAuthenticated", "true");
-    localStorage.setItem("driverName", "John Driver");
-    
-    toast({
-      title: "Welcome back!",
-      description: "Successfully signed in to SwiftTrack",
-    });
-    
-    navigate("/dashboard");
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid email address",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await AuthService.signin(email, password);
+      
+      if (response.success) {
+        toast({
+          title: "Welcome back!",
+          description: "Successfully signed in to SwiftTrack",
+        });
+        
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Sign In Failed",
+          description: response.message || "Invalid email or password",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Sign in error:', error);
+      toast({
+        title: "Connection Error",
+        description: "Unable to connect to server. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -80,8 +112,19 @@ const SignIn = () => {
               </div>
             </div>
             
-            <Button type="submit" className="w-full">
-              Sign In
+            <Button 
+              type="submit" 
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </Button>
           </form>
           
