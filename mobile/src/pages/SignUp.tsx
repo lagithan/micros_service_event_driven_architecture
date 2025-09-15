@@ -4,18 +4,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Truck, User, Mail, Phone, Car, Lock } from "lucide-react";
+import { Truck, User, Mail, Phone, Car, Lock, Loader2, MapPin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AuthService } from "@/lib/api";
 
 const SignUp = () => {
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
     phone: "",
+    city: "",
+    address: "",
     vehicleNumber: "",
     password: "",
     confirmPassword: "",
   });
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -23,14 +27,28 @@ const SignUp = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSignUp = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validation
-    if (Object.values(formData).some(value => !value)) {
+    const requiredFields = ['fullName', 'email', 'password', 'confirmPassword'];
+    const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
+    
+    if (missingFields.length > 0) {
       toast({
         title: "Error", 
-        description: "Please fill in all fields",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid email address",
         variant: "destructive",
       });
       return;
@@ -45,16 +63,52 @@ const SignUp = () => {
       return;
     }
 
-    // Mock registration - in real app, you'd call an API
-    localStorage.setItem("isAuthenticated", "true");
-    localStorage.setItem("driverName", formData.fullName);
-    
-    toast({
-      title: "Account created!",
-      description: "Welcome to SwiftTrack",
-    });
-    
-    navigate("/dashboard");
+    if (formData.password.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await AuthService.register({
+        fullName: formData.fullName,
+        email: formData.email,
+        password: formData.password,
+        phoneNo: formData.phone,
+        city: formData.city,
+        address: formData.address,
+        vehicleNumber: formData.vehicleNumber,
+      });
+      
+      if (response.success) {
+        toast({
+          title: "Registration successful!",
+          description: "Welcome to SwiftTrack. You can now start accepting deliveries.",
+        });
+        
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Registration failed",
+          description: response.message || "Unable to create your account. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      toast({
+        title: "Connection Error",
+        description: "Unable to connect to server. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -116,6 +170,36 @@ const SignUp = () => {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="city">City</Label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="city"
+                  name="city"
+                  placeholder="New York"
+                  value={formData.city}
+                  onChange={handleInputChange}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="address">Address</Label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="address"
+                  name="address"
+                  placeholder="123 Main St, Apt 4B"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="vehicleNumber">Vehicle Number</Label>
               <div className="relative">
                 <Car className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -162,8 +246,19 @@ const SignUp = () => {
               </div>
             </div>
 
-            <Button type="submit" className="w-full">
-              Create Account
+            <Button 
+              type="submit" 
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating Account...
+                </>
+              ) : (
+                "Create Account"
+              )}
             </Button>
           </form>
 

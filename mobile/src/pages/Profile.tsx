@@ -1,33 +1,107 @@
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, User, Mail, Phone, Car, LogOut } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Car, LogOut, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AuthService, TokenManager, DeliveryService, Driver } from "@/lib/api";
 
 const Profile = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const driverName = localStorage.getItem("driverName") || "John Driver";
-
-  // Editable state
+  const driver = TokenManager.getDriver();
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [profile, setProfile] = useState({
-    fullName: driverName,
-    email: localStorage.getItem("driverEmail") || "nivethantsothi19@gmail.com",
-    phone: localStorage.getItem("driverPhone") || "+1234567890",
-    vehicleNumber: localStorage.getItem("driverVehicle") || "ABC123",
-    deliveriesToday: 12,
-    successRate: 98,
+    fullName: "",
+    email: "",
+    phoneNo: "",
+    city: "",
+    address: "",
+    vehicleNumber: "",
+  });
+  const [statistics, setStatistics] = useState({
+    deliveriesToday: 0,
+    successRate: 0,
+    totalDeliveries: 0,
   });
 
+  useEffect(() => {
+    if (!TokenManager.isAuthenticated()) {
+      navigate('/signin');
+      return;
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    fetchProfileData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchProfileData = async () => {
+    try {
+      // Load driver profile from stored data first
+      if (driver) {
+        setProfile({
+          fullName: driver.fullName,
+          email: driver.email,
+          phoneNo: driver.phoneNo || "",
+          city: driver.city || "",
+          address: driver.address || "",
+          vehicleNumber: driver.vehicleNumber || "",
+        });
+      }
+
+      // Try to fetch fresh profile data from API
+      const profileResponse = await AuthService.getProfile();
+      if (profileResponse.success && profileResponse.data?.user) {
+        const userData = profileResponse.data.user;
+        setProfile({
+          fullName: userData.fullName,
+          email: userData.email,
+          phoneNo: userData.phoneNo || "",
+          city: userData.city || "",
+          address: userData.address || "",
+          vehicleNumber: userData.vehicleNumber || "",
+        });
+        TokenManager.setDriver(userData);
+      }
+
+      // Try to fetch delivery statistics
+      try {
+        const statsResponse = await DeliveryService.getStatistics();
+        if (statsResponse.success) {
+          setStatistics({
+            deliveriesToday: statsResponse.data?.deliveriesToday || 0,
+            successRate: statsResponse.data?.successRate || 0,
+            totalDeliveries: statsResponse.data?.totalDeliveries || 0,
+          });
+        }
+      } catch (error) {
+        console.log('Statistics not available:', error);
+        // Keep default statistics if API fails
+      }
+
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      toast({
+        title: "Error",
+        description: "Unable to load profile data",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("driverName");
+    TokenManager.removeToken();
     toast({
       title: "Logged out",
       description: "You have been successfully logged out",
@@ -38,25 +112,95 @@ const Profile = () => {
   const handleEdit = () => setEditMode(true);
 
   const handleCancel = () => {
-    setProfile({
-      fullName: localStorage.getItem("driverName") || "John Driver",
-      email: localStorage.getItem("driverEmail") || "nivethantsothi19@gmail.com",
-      phone: localStorage.getItem("driverPhone") || "+1234567890",
-      vehicleNumber: localStorage.getItem("driverVehicle") || "ABC123",
-      deliveriesToday: 12,
-      successRate: 98,
-    });
+    // Reset to original data
+    if (driver) {
+      setProfile({
+        fullName: driver.fullName,
+        email: driver.email,
+        phoneNo: driver.phoneNo || "",
+        city: driver.city || "",
+        address: driver.address || "",
+        vehicleNumber: driver.vehicleNumber || "",
+      });
+    }
     setEditMode(false);
   };
 
-  const handleSave = () => {
-    localStorage.setItem("driverName", profile.fullName);
-    localStorage.setItem("driverEmail", profile.email);
-    localStorage.setItem("driverPhone", profile.phone);
-    localStorage.setItem("driverVehicle", profile.vehicleNumber);
-    toast({ title: "Profile updated", description: "Your changes have been saved." });
-    setEditMode(false);
+  const handleSave = async () => {
+    // Validation
+    if (!profile.fullName || !profile.email) {
+      toast({
+        title: "Error",
+        description: "Name and email are required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(profile.email)) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid email address",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      // Note: The current backend doesn't have an update profile endpoint
+      // For now, we'll update the local storage and show a success message
+      // In a real implementation, you would call an API endpoint to update the profile
+      
+      const updatedDriver = {
+        ...driver,
+        fullName: profile.fullName,
+        email: profile.email,
+        phoneNo: profile.phoneNo,
+        city: profile.city,
+        address: profile.address,
+        vehicleNumber: profile.vehicleNumber,
+      };
+
+      TokenManager.setDriver(updatedDriver as Driver);
+      
+      toast({
+        title: "Profile Updated",
+        description: "Your profile has been successfully updated",
+      });
+      
+      setEditMode(false);
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update profile. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const handleInputChange = (field: keyof typeof profile, value: string) => {
+    setProfile(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+          <p className="text-muted-foreground">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -114,7 +258,7 @@ const Profile = () => {
                   id="fullName"
                   value={profile.fullName}
                   readOnly={!editMode}
-                  onChange={e => setProfile(p => ({ ...p, fullName: e.target.value }))}
+                  onChange={e => handleInputChange('fullName', e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -128,7 +272,7 @@ const Profile = () => {
                   id="email"
                   value={profile.email}
                   readOnly={!editMode}
-                  onChange={e => setProfile(p => ({ ...p, email: e.target.value }))}
+                  onChange={e => handleInputChange('email', e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -140,9 +284,37 @@ const Profile = () => {
                 <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="phone"
-                  value={profile.phone}
+                  value={profile.phoneNo}
                   readOnly={!editMode}
-                  onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))}
+                  onChange={e => handleInputChange('phoneNo', e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="city">City</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="city"
+                  value={profile.city}
+                  readOnly={!editMode}
+                  onChange={e => handleInputChange('city', e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="address">Address</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="address"
+                  value={profile.address}
+                  readOnly={!editMode}
+                  onChange={e => handleInputChange('address', e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -156,7 +328,7 @@ const Profile = () => {
                   id="vehicle"
                   value={profile.vehicleNumber}
                   readOnly={!editMode}
-                  onChange={e => setProfile(p => ({ ...p, vehicleNumber: e.target.value }))}
+                  onChange={e => handleInputChange('vehicleNumber', e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -173,13 +345,13 @@ const Profile = () => {
             <div className="grid grid-cols-2 gap-6">
               <div className="text-center">
                 <div className="text-3xl font-bold text-success mb-2">
-                  {profile.deliveriesToday}
+                  {statistics.deliveriesToday}
                 </div>
                 <p className="text-sm text-muted-foreground">Deliveries Today</p>
               </div>
               <div className="text-center">
                 <div className="text-3xl font-bold text-primary mb-2">
-                  {profile.successRate}%
+                  {statistics.successRate}%
                 </div>
                 <p className="text-sm text-muted-foreground">Success Rate</p>
               </div>
@@ -190,8 +362,24 @@ const Profile = () => {
         {/* Edit/Save/Cancel Buttons */}
         {editMode ? (
           <div className="flex gap-4">
-            <Button variant="success" onClick={handleSave} className="flex-1" size="lg">Save</Button>
-            <Button variant="outline" onClick={handleCancel} className="flex-1" size="lg">Cancel</Button>
+            <Button 
+              onClick={handleSave} 
+              className="flex-1" 
+              size="lg"
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+            <Button variant="outline" onClick={handleCancel} className="flex-1" size="lg">
+              Cancel
+            </Button>
           </div>
         ) : (
           <Button 
