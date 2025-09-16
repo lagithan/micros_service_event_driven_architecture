@@ -8,24 +8,26 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import LogisticsScene from '@/components/3d/LogisticsScene'
 import { Truck, Eye, EyeOff, Lock, Mail, ArrowLeft, Building, Phone } from 'lucide-react'
+import { AuthService } from '@/lib/api'   // ✅ Import our API layer
 
 export default function Signup() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     businessName: '',
     email: '',
-    phone: '',
+    phoneNo: '',   // ✅ changed to match backend `phoneNo`
     businessType: '',
     password: '',
     confirmPassword: '',
     agreeToTerms: false,
-    marketingEmails: true
   })
   const navigate = useNavigate()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
     if (formData.password !== formData.confirmPassword) {
       alert('Passwords do not match')
       return
@@ -34,9 +36,28 @@ export default function Signup() {
       alert('Please agree to the terms and conditions')
       return
     }
-    // TODO: Implement actual registration
-    console.log('Registration attempt:', formData)
-    navigate('/dashboard')
+
+    try {
+      setLoading(true)
+      const response = await AuthService.register({
+        name: formData.businessName,
+        email: formData.email,
+        password: formData.password,
+        phoneNo: formData.phoneNo,
+        businessType: formData.businessType,
+      })
+
+      if (response.success) {
+        alert('Registration successful! 🎉')
+        navigate('/dashboard')
+      } else {
+        alert(response.message || 'Registration failed')
+      }
+    } catch (err: any) {
+      alert(err.message || 'Something went wrong')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,45 +92,21 @@ export default function Signup() {
           <p className="text-xl text-center text-gray-200 max-w-md">
             Create your account to access comprehensive logistics management tools and scale your e-commerce operations.
           </p>
-          
-          <div className="mt-8 space-y-3 text-center">
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-2 h-2 bg-white rounded-full"></div>
-              <span className="text-sm">Free 30-day trial</span>
-            </div>
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-2 h-2 bg-white rounded-full"></div>
-              <span className="text-sm">No credit card required</span>
-            </div>
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-2 h-2 bg-white rounded-full"></div>
-              <span className="text-sm">Cancel anytime</span>
-            </div>
-          </div>
         </div>
       </div>
 
       {/* Right Side - Signup Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 bg-background">
         <div className="w-full max-w-md space-y-6">
-          {/* Header */}
           <div className="text-center">
             <Link to="/" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Home
             </Link>
-            
-            <div className="flex justify-center mb-6 lg:hidden">
-              <div className="w-12 h-12 gradient-primary rounded-xl flex items-center justify-center">
-                <Truck className="w-6 h-6 text-white" />
-              </div>
-            </div>
-            
             <h2 className="text-2xl font-bold text-foreground">Create Your Account</h2>
             <p className="text-muted-foreground mt-2">Start your logistics transformation today</p>
           </div>
 
-          {/* Signup Form */}
           <Card className="shadow-xl border-0 bg-card">
             <CardHeader className="space-y-1">
               <CardTitle className="text-center">Business Registration</CardTitle>
@@ -156,15 +153,15 @@ export default function Signup() {
 
                 {/* Phone */}
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
+                  <Label htmlFor="phoneNo">Phone Number</Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="phone"
-                      name="phone"
+                      id="phoneNo"
+                      name="phoneNo"
                       type="tel"
                       placeholder="+94 xxx xxx xxx"
-                      value={formData.phone}
+                      value={formData.phoneNo}
                       onChange={handleInputChange}
                       className="pl-10"
                       required
@@ -175,7 +172,7 @@ export default function Signup() {
                 {/* Business Type */}
                 <div className="space-y-2">
                   <Label htmlFor="businessType">Business Type</Label>
-                  <Select onValueChange={handleSelectChange} required>
+                  <Select onValueChange={handleSelectChange} value={formData.businessType} required>
                     <SelectTrigger>
                       <SelectValue placeholder="Select your business type" />
                     </SelectTrigger>
@@ -240,41 +237,36 @@ export default function Signup() {
                   </div>
                 </div>
 
-                {/* Checkboxes */}
-                <div className="space-y-3">
-                  <div className="flex items-start space-x-2">
-                    <Checkbox
-                      id="agreeToTerms"
-                      name="agreeToTerms"
-                      checked={formData.agreeToTerms}
-                      onCheckedChange={(checked) => 
-                        setFormData(prev => ({ ...prev, agreeToTerms: checked as boolean }))
-                      }
-                      required
-                    />
-                    <Label htmlFor="agreeToTerms" className="text-sm leading-relaxed">
-                      I agree to the{' '}
-                      <Link to="/terms" className="text-primary hover:underline">
-                        Terms of Service
-                      </Link>{' '}
-                      and{' '}
-                      <Link to="/privacy" className="text-primary hover:underline">
-                        Privacy Policy
-                      </Link>
-                    </Label>
-                  </div>
-
-
+                {/* Terms */}
+                <div className="flex items-start space-x-2">
+                  <Checkbox
+                    id="agreeToTerms"
+                    name="agreeToTerms"
+                    checked={formData.agreeToTerms}
+                    onCheckedChange={(checked) => 
+                      setFormData(prev => ({ ...prev, agreeToTerms: checked as boolean }))
+                    }
+                    required
+                  />
+                  <Label htmlFor="agreeToTerms" className="text-sm leading-relaxed">
+                    I agree to the{' '}
+                    <Link to="/terms" className="text-primary hover:underline">
+                      Terms of Service
+                    </Link>{' '}
+                    and{' '}
+                    <Link to="/privacy" className="text-primary hover:underline">
+                      Privacy Policy
+                    </Link>
+                  </Label>
                 </div>
 
-                <Button type="submit" variant="gradient" size="lg" className="w-full">
-                  Create Account
+                <Button type="submit" variant="gradient" size="lg" className="w-full" disabled={loading}>
+                  {loading ? 'Creating Account...' : 'Create Account'}
                 </Button>
               </form>
             </CardContent>
           </Card>
 
-          {/* Sign In Link */}
           <div className="text-center">
             <p className="text-muted-foreground">
               Already have an account?{' '}
