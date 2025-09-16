@@ -1,5 +1,5 @@
 const express = require('express');
-const DeliveryController = require('../controllers/deliveryController');
+const DeliveryController = require('../controllers/DeliveryController');
 
 const router = express.Router();
 
@@ -49,7 +49,7 @@ const validateStatusUpdate = (req, res, next) => {
 const validateOrderId = (req, res, next) => {
   const { orderId } = req.params;
 
-  if (!orderId || orderId.length < 3) {
+  if (!orderId || orderId.trim() === '') {
     return res.status(400).json({
       success: false,
       message: 'Valid orderId is required'
@@ -68,7 +68,7 @@ router.post('/', validateDeliveryCreation, DeliveryController.createDelivery);
 router.get('/order/:orderId', validateOrderId, DeliveryController.getDelivery);
 
 // Update delivery status
-router.patch('/:orderId/status', validateOrderId, validateStatusUpdate, DeliveryController.updateDeliveryStatus);
+router.patch('/status/:orderId', validateOrderId, DeliveryController.updateDeliveryStatus);
 
 // Cancel delivery
 router.patch('/:orderId/cancel', validateOrderId, DeliveryController.cancelDelivery);
@@ -78,6 +78,18 @@ router.get('/person/:deliveryPersonId', DeliveryController.getDeliveriesForPerso
 
 // Get delivery statistics
 router.get('/statistics', DeliveryController.getDeliveryStatistics);
+
+// Get available orders for pickup
+router.get('/available-orders', DeliveryController.getAvailableOrders);
+
+// Assign order to delivery person
+router.post('/assign/:orderId', validateOrderId, DeliveryController.assignOrderToDriver);
+
+// Get my deliveries for a delivery person
+router.get('/my/:deliveryPersonId', DeliveryController.getMyDeliveries);
+
+// Update cash payment status
+router.patch('/payment/:orderId', validateOrderId, DeliveryController.updateCashPaymentStatus);
 
 // Health check for delivery routes
 router.get('/health', (req, res) => {
@@ -89,10 +101,14 @@ router.get('/health', (req, res) => {
       available: [
         'POST /api/deliveries',
         'GET /api/deliveries/order/:orderId',
-        'PATCH /api/deliveries/:orderId/status',
+        'PATCH /api/deliveries/status/:orderId',
         'PATCH /api/deliveries/:orderId/cancel',
         'GET /api/deliveries/person/:deliveryPersonId',
-        'GET /api/deliveries/statistics'
+        'GET /api/deliveries/statistics',
+        'GET /api/deliveries/available-orders',
+        'POST /api/deliveries/assign/:orderId',
+        'GET /api/deliveries/my/:deliveryPersonId',
+        'PATCH /api/deliveries/payment/:orderId'
       ]
     },
     timestamp: new Date().toISOString()
