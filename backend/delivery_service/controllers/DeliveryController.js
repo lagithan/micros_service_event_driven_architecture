@@ -735,6 +735,23 @@ class DeliveryController {
 
       console.log('✅ Status updated successfully:', result);
 
+      // Publish delivery status updated event to Kafka
+      try {
+        console.log('📤 Publishing delivery status update to Kafka...');
+        await publishDeliveryStatusUpdatedEvent({
+          orderId: result.orderRecord.order_id,
+          previousStatus: 'previous-status', // We don't have previous status in this method, could be improved
+          newStatus: status,
+          statusChangedBy: `delivery-person-${deliveryPersonId}`,
+          changeReason: `Status updated via mobile app to ${status}`,
+          location: result.orderRecord.destination_address || 'Unknown',
+          deliveryPersonId: deliveryPersonId
+        });
+        console.log('✅ Kafka event published successfully for order:', orderId);
+      } catch (kafkaError) {
+        console.warn('⚠️  Failed to publish delivery status updated event to Kafka:', kafkaError.message);
+      }
+
       res.json({
         success: true,
         message: `Order status updated to ${status}`,

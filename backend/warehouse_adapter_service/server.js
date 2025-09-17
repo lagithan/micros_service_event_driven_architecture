@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const warehouseRoutes = require('./routes/warehouseRoutes');
 const { initKafkaConsumer, startKafkaConsumer } = require('./config/kafkaConsumer');
+const { initKafkaProducer, closeKafkaProducer } = require('./config/kafkaProducer');
 const WarehouseEventHandler = require('./handlers/warehouseEventHandler');
 
 const app = express();
@@ -292,6 +293,15 @@ const gracefulShutdown = async () => {
   console.log(`🔄 Shutting down ${SERVICE_NAME}...`);
   
   try {
+    // Close Kafka producer
+    console.log(`🔄 Closing Kafka producer...`);
+    await closeKafkaProducer();
+    console.log(`✅ Kafka producer closed`);
+  } catch (error) {
+    console.log(`⚠️  Failed to close Kafka producer: ${error.message}`);
+  }
+  
+  try {
     // Attempt to deregister from gateway
     console.log(`🔄 Deregistering from gateway...`);
     await axios.delete(`${GATEWAY_URL}/gateway/register/${SERVICE_NAME}`, {
@@ -325,6 +335,16 @@ const startServer = async () => {
     } catch (error) {
       console.warn(`⚠️  Kafka consumer initialization failed: ${error.message}`);
       console.warn(`⚠️  Service will continue running without event processing`);
+    }
+
+    // Initialize Kafka producer
+    console.log(`📤 Initializing Kafka producer...`);
+    try {
+      await initKafkaProducer();
+      console.log(`✅ Kafka producer initialized successfully`);
+    } catch (error) {
+      console.warn(`⚠️  Kafka producer initialization failed: ${error.message}`);
+      console.warn(`⚠️  Service will continue running without notification sending`);
     }
     
     // Start the server

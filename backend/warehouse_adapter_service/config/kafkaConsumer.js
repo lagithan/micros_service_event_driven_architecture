@@ -19,7 +19,8 @@ const consumer = kafka.consumer({
 // Topics to consume
 const CONSUMED_TOPICS = {
   ORDER_EVENTS: 'order-events',
-  ORDER_STATUS_EVENTS: 'order-status-events'
+  ORDER_STATUS_EVENTS: 'order-status-events',
+  DELIVERY_STATUS_EVENTS: 'delivery-status-events'
 };
 
 // Initialize Kafka consumer
@@ -92,6 +93,10 @@ const routeEvent = async (topic, event, handlers) => {
         await handleOrderStatusEvent(event, handlers);
         break;
         
+      case CONSUMED_TOPICS.DELIVERY_STATUS_EVENTS:
+        await handleDeliveryStatusEvent(event, handlers);
+        break;
+        
       default:
         console.warn(`⚠️  Unknown topic: ${topic}`);
     }
@@ -146,6 +151,31 @@ const handleOrderStatusEvent = async (event, handlers) => {
       
     default:
       console.warn(`⚠️  Unhandled order status event type: ${eventType}`);
+  }
+};
+
+// Handle delivery status events (DELIVERY_STATUS_UPDATED, etc.)
+const handleDeliveryStatusEvent = async (event, handlers) => {
+  const { eventType } = event;
+  
+  console.log(`🚚 Processing delivery status event: ${eventType}`);
+  
+  switch (eventType) {
+    case 'DELIVERY_STATUS_UPDATED':
+      if (handlers.onOrderStatusUpdated) {
+        // Map delivery status event to order status handler
+        const mappedEvent = {
+          ...event,
+          eventType: 'ORDER_STATUS_UPDATED' // Map to expected event type
+        };
+        await handlers.onOrderStatusUpdated(mappedEvent);
+      } else {
+        console.warn(`⚠️  No handler for DELIVERY_STATUS_UPDATED event`);
+      }
+      break;
+      
+    default:
+      console.warn(`⚠️  Unhandled delivery status event type: ${eventType}`);
   }
 };
 

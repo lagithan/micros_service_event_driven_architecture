@@ -1,10 +1,6 @@
 const { Pool } = require('pg');
 
-const pool = n        id SERIAL PRIMARY KEY,
-        order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
-        previous_status VARCHAR(50),
-        new_status VARCHAR(50) NOT NULL,
-        status_changed_by VARCHAR(100),ol({
+const pool = new Pool({
   host: 'aws-1-us-east-2.pooler.supabase.com',
   port: 6543, // check dashboard if it should be 5432
   database: 'postgres',
