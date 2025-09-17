@@ -1,4 +1,5 @@
 const { TCPMessageFormatter, TCPConnectionManager, OrderServiceClient } = require('../config/warehouseConfig');
+const { notifyOrderReachedWarehouse } = require('../config/kafkaProducer');
 
 class WarehouseEventHandler {
   constructor() {
@@ -179,6 +180,25 @@ class WarehouseEventHandler {
       // Simulate WMS acknowledgment and processing
       if (newStatus === 'Inwarehouse') {
         console.log('📦 Order arrived at warehouse - simulating WMS processing...');
+        
+        // Send Kafka notification to order service immediately
+        console.log('📨 Sending Kafka notification: Order reached at warehouse');
+        try {
+          const kafkaResult = await notifyOrderReachedWarehouse(orderId, {
+            orderNumber: orderNumber,
+            warehouseLocation: 'Main Warehouse',
+            receivedBy: 'Warehouse Staff',
+            trackingNumber: eventData.trackingNumber
+          });
+          
+          if (kafkaResult.success) {
+            console.log('✅ Kafka notification sent successfully to order service');
+          } else {
+            console.error('❌ Failed to send Kafka notification:', kafkaResult.error);
+          }
+        } catch (kafkaError) {
+          console.error('❌ Error sending Kafka notification:', kafkaError);
+        }
         
         // Simulate WMS processing delay
         await new Promise(resolve => setTimeout(resolve, 2000));

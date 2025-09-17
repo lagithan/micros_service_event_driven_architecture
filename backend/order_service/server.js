@@ -92,6 +92,43 @@ const handleOrderStatusUpdate = async (eventData) => {
   }
 };
 
+// Kafka event handler for warehouse notifications
+const handleWarehouseNotification = async (eventData) => {
+  try {
+    console.log('📦 Processing warehouse notification:', eventData);
+    
+    const { eventType, orderId, status, message, warehouse, timestamp } = eventData;
+    
+    if (eventType === 'ORDER_REACHED_WAREHOUSE') {
+      console.log(`🏭 Order ${orderId} reached warehouse: ${message}`);
+      
+      // Log warehouse notification details
+      console.log('Warehouse Details:', {
+        orderId,
+        status,
+        location: warehouse?.location,
+        receivedBy: warehouse?.receivedBy,
+        receivedAt: warehouse?.receivedAt,
+        message,
+        timestamp
+      });
+      
+      // You could add additional processing here:
+      // - Update order tracking information
+      // - Send customer notifications
+      // - Update inventory systems
+      // - Generate reports
+      
+      console.log(`✅ Warehouse notification processed successfully for order ${orderId}`);
+    } else {
+      console.log(`📨 Received unknown warehouse notification type: ${eventType}`);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error handling warehouse notification:', error);
+  }
+};
+
 // Self-registration with Express API Gateway
 const selfRegister = async (maxRetries = 5, delayMs = 3000) => {
   let attempts = 0;
@@ -314,9 +351,9 @@ const startServer = async () => {
       await initKafka();
       console.log(`✅ Kafka connected successfully`);
       
-      // Start Kafka consumer for order status updates
-      console.log(`📥 Starting Kafka consumer for order status updates...`);
-      await startKafkaConsumer(handleOrderStatusUpdate);
+      // Start Kafka consumer for order status updates and warehouse notifications
+      console.log(`📥 Starting Kafka consumer for order status updates and warehouse notifications...`);
+      await startKafkaConsumer(handleOrderStatusUpdate, handleWarehouseNotification);
       console.log(`✅ Kafka consumer started successfully`);
       
     } catch (error) {
