@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { Plus, X, Package, MapPin, DollarSign } from 'lucide-react'
+import { Plus, X, Package, MapPin, DollarSign, Loader2 } from 'lucide-react'
+import { OrderService, TokenManager } from '@/lib/api'
 
 interface OrderItem {
   id: string
@@ -23,6 +24,7 @@ interface CreateOrderModalProps {
 }
 
 export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: CreateOrderModalProps) {
+  const [isLoading, setIsLoading] = useState(false)
   const [orderData, setOrderData] = useState({
     customerName: '',
     customerPhone: '',
@@ -94,7 +96,15 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
     return (basePrice * priorityMultiplier) + weightCharge + itemHandlingCharge
   }
 
-  const handleSubmit = () => {
+  const preparePackageDetails = () => {
+    const itemCount = orderData.items.reduce((sum, item) => sum + item.quantity, 0)
+    const totalWeight = orderData.items.reduce((sum, item) => sum + (item.quantity * item.weight), 0)
+    const categories = orderData.items.map(item => `${item.quantity}x ${item.category} (${(item.quantity * item.weight).toFixed(1)}kg)`).join(', ')
+    
+    return `${itemCount} items, ${totalWeight.toFixed(1)}kg total. Categories: ${categories}. Priority: ${orderData.priority}.`
+  }
+
+  const handleSubmit = async () => {
     // Check required fields
     const requiredFields = {
       'Customer Name': orderData.customerName.trim(),
@@ -126,35 +136,81 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
       `Order Summary:\n\nCustomer: ${orderData.customerName}\nDelivery to: ${orderData.deliveryBeneficiaryName}\nItems: ${orderData.items.length} item categories\nTotal Amount: $${orderValue.toFixed(2)}\n\nPayment Method: Cash on Delivery\n\nConfirm order creation?`
     )
     
-    if (proceedWithCashPayment) {
-      const order = {
-        id: `ORD-${Date.now()}`,
-        ...orderData,
-        status: 'Processing',
-        createdAt: new Date().toISOString(),
-        estimatedValue: orderValue,
-        destination: orderData.deliveryAddress.split(',')[0] // Use first part of address as destination
+    if (!proceedWithCashPayment) {
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const client = TokenManager.getClient()
+      
+      // Prepare order data for API
+      const apiOrderData = {
+        senderName: orderData.customerName.trim(),
+        receiverName: orderData.deliveryBeneficiaryName.trim(),
+        receiverPhone: orderData.deliveryPhone.trim(),
+        pickupAddress: orderData.pickupAddress.trim(),
+        destinationAddress: orderData.deliveryAddress.trim(),
+        clientId: client?.id ? Number(client.id) : undefined,
+        packageDetails: preparePackageDetails(),
+        specialInstructions: orderData.specialInstructions.trim() || undefined,
       }
-      
-      onOrderCreate(order)
-      
-      // Success message
-      alert(`Order ${order.id} created successfully!\n\nPayment: Cash on Delivery\nAmount: $${orderValue.toFixed(2)}\n\nThe order has been added to your order list.`)
-      
-      // Reset form
-      setOrderData({
-        customerName: '',
-        customerPhone: '',
-        pickupAddress: '',
-        deliveryAddress: '',
-        deliveryPhone: '',
-        deliveryBeneficiaryName: '',
-        priority: 'standard',
-        specialInstructions: '',
-        items: []
-      })
-      setNewItem({ category: '', quantity: 1, weight: 0.5 })
-      onOpenChange(false)
+
+      console.log('Sending order data to API:', apiOrderData)
+
+      // Call the API to create the order
+      const response = await OrderService.createOrder(apiOrderData)
+
+      if (response.success && response.data) {
+        // Transform API response to match frontend format
+        const createdOrder = {
+          id: response.data.orderId,
+          customerName: response.data.senderName,
+          receiverName: response.data.receiverName,
+          receiverPhone: response.data.receiverPhone,
+          status: response.data.orderStatus === 'Pending' ? 'Processing' : response.data.orderStatus,
+          destination: response.data.destinationAddress.split(',')[0], // First part as destination
+          estimatedValue: orderValue,
+          createdAt: response.data.createdAt,
+          trackingNumber: response.data.trackingNumber,
+          priority: orderData.priority,
+          items: orderData.items,
+          paymentStatus: 'unpaid',
+          pickupAddress: response.data.pickupAddress,
+          destinationAddress: response.data.destinationAddress,
+          packageDetails: response.data.packageDetails,
+          specialInstructions: response.data.specialInstructions
+        }
+        
+        // Add to local state
+        onOrderCreate(createdOrder)
+        
+        // Success message with tracking number
+        alert(`Order created successfully!\n\nOrder ID: ${response.data.orderId}\nTracking Number: ${response.data.trackingNumber}\nPayment: Cash on Delivery\nAmount: $${orderValue.toFixed(2)}\n\nYour order has been submitted and is now being processed.`)
+        
+        // Reset form
+        setOrderData({
+          customerName: '',
+          customerPhone: '',
+          pickupAddress: '',
+          deliveryAddress: '',
+          deliveryPhone: '',
+          deliveryBeneficiaryName: '',
+          priority: 'standard',
+          specialInstructions: '',
+          items: []
+        })
+        setNewItem({ category: '', quantity: 1, weight: 0.5 })
+        onOpenChange(false)
+      } else {
+        throw new Error(response.message || 'Failed to create order')
+      }
+    } catch (error) {
+      console.error('Order creation failed:', error)
+      alert(`Failed to create order: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease check your connection and try again.`)
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -192,6 +248,7 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
                     onChange={(e) => setOrderData(prev => ({ ...prev, customerName: e.target.value }))}
                     placeholder="Enter customer name"
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div>
@@ -202,6 +259,7 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
                     onChange={(e) => setOrderData(prev => ({ ...prev, customerPhone: e.target.value }))}
                     placeholder="+94 XX XXX XXXX"
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div>
@@ -213,6 +271,7 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
                     placeholder="Enter pickup address"
                     rows={2}
                     required
+                    disabled={isLoading}
                   />
                 </div>
               </div>
@@ -235,6 +294,7 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
                     onChange={(e) => setOrderData(prev => ({ ...prev, deliveryBeneficiaryName: e.target.value }))}
                     placeholder="Name of person receiving the order"
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div>
@@ -245,6 +305,7 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
                     onChange={(e) => setOrderData(prev => ({ ...prev, deliveryPhone: e.target.value }))}
                     placeholder="+94 XX XXX XXXX"
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div>
@@ -256,11 +317,12 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
                     placeholder="Enter delivery address"
                     rows={2}
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div>
                   <Label htmlFor="priority">Priority</Label>
-                  <Select value={orderData.priority} onValueChange={(value) => setOrderData(prev => ({ ...prev, priority: value }))}>
+                  <Select value={orderData.priority} onValueChange={(value) => setOrderData(prev => ({ ...prev, priority: value }))} disabled={isLoading}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
@@ -285,7 +347,7 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 border border-border rounded-lg bg-muted/30">
               <div>
                 <Label htmlFor="itemCategory">Item Category</Label>
-                <Select value={newItem.category} onValueChange={(value) => setNewItem(prev => ({ ...prev, category: value }))}>
+                <Select value={newItem.category} onValueChange={(value) => setNewItem(prev => ({ ...prev, category: value }))} disabled={isLoading}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select item category" />
                   </SelectTrigger>
@@ -309,6 +371,7 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
                     setNewItem(prev => ({ ...prev, quantity: value }))
                   }}
                   min="1"
+                  disabled={isLoading}
                   onKeyPress={(e) => handleKeyPress(e, addItem)}
                 />
               </div>
@@ -325,11 +388,16 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
                   }}
                   min="0.1"
                   placeholder="0.5"
+                  disabled={isLoading}
                   onKeyPress={(e) => handleKeyPress(e, addItem)}
                 />
               </div>
               <div className="flex items-end">
-                <Button onClick={addItem} className="w-full" disabled={!newItem.category || newItem.weight <= 0}>
+                <Button 
+                  onClick={addItem} 
+                  className="w-full" 
+                  disabled={!newItem.category || newItem.weight <= 0 || isLoading}
+                >
                   <Plus className="w-4 h-4 mr-1" />
                   Add Item
                 </Button>
@@ -358,6 +426,7 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
                       size="sm"
                       onClick={() => removeItem(item.id)}
                       className="text-destructive hover:text-destructive"
+                      disabled={isLoading}
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -389,6 +458,7 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
             onChange={(e) => setOrderData(prev => ({ ...prev, specialInstructions: e.target.value }))}
             placeholder="Any special handling instructions..."
             rows={3}
+            disabled={isLoading}
           />
         </div>
 
@@ -430,16 +500,25 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
             Cancel
           </Button>
           <Button 
             onClick={handleSubmit}
-            disabled={!orderData.customerName.trim() || !orderData.deliveryAddress.trim() || orderData.items.length === 0}
+            disabled={!orderData.customerName.trim() || !orderData.deliveryAddress.trim() || orderData.items.length === 0 || isLoading}
             className="gradient-primary"
           >
-            <Package className="w-4 h-4 mr-2" />
-            Create Order
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Creating Order...
+              </>
+            ) : (
+              <>
+                <Package className="w-4 h-4 mr-2" />
+                Create Order
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
