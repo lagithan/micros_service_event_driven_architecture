@@ -63,7 +63,7 @@ export interface DeliveryOrder {
   customerPhone?: string;
   deliveryAddress?: string;
   pickupAddress?: string;
-  deliveryStatus: 'Picking' | 'PickedUp' | 'Delivering' | 'Delivered';
+  deliveryStatus: 'Pending' | 'Selected_for_pickup' | 'Pickedup_from_client' | 'Inwarehouse' | 'Pickedup_from_warehouse' | 'Delivered';
   pickedupDate?: string;
   deliveredDate?: string;
   items?: { name: string; quantity: number }[];
@@ -449,7 +449,7 @@ export class DeliveryService {
    */
   static async updateStatus(
     orderId: string,
-    newStatus: 'Picking' | 'PickedUp' | 'Delivering' | 'Delivered',
+    newStatus: 'Pending' | 'Selected_for_pickup' | 'Pickedup_from_client' | 'Inwarehouse' | 'Pickedup_from_warehouse' | 'Delivered',
     notes?: string
   ): Promise<DeliveryResponse> {
     const driver = TokenManager.getDriver();

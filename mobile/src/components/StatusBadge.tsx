@@ -2,32 +2,38 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle, XCircle, Clock } from "lucide-react";
 
 interface StatusBadgeProps {
-  status: "select" | "picking_up" | "picked_up" | "delivering" | "delivered";
+  status: "pending" | "selected_for_pickup" | "pickedup_from_client" | "inwarehouse" | "pickedup_from_warehouse" | "delivered";
   className?: string;
 }
 
 const StatusBadge = ({ status, className }: StatusBadgeProps) => {
   const statusConfig = {
-    select: {
-      label: "Ready for Pickup",
+    pending: {
+      label: "Pending",
+      variant: "default" as const,
+      icon: Clock,
+      customClass: "bg-gray-100 text-gray-800 border-gray-200"
+    },
+    selected_for_pickup: {
+      label: "Selected for Pickup",
       variant: "default" as const,
       icon: Clock,
       customClass: "bg-blue-100 text-blue-800 border-blue-200"
     },
-    picking_up: {
-      label: "Picking Up",
+    pickedup_from_client: {
+      label: "Picked up from Client",
       variant: "default" as const,
-      icon: Clock,
+      icon: CheckCircle,
       customClass: "bg-blue-200 text-blue-900 border-blue-300"
     },
-    picked_up: {
-      label: "Picked Up",
+    inwarehouse: {
+      label: "In Warehouse",
       variant: "secondary" as const,
       icon: CheckCircle,
       customClass: "bg-blue-300 text-blue-900 border-blue-400"
     },
-    delivering: {
-      label: "Delivering",
+    pickedup_from_warehouse: {
+      label: "Picked up from Warehouse",
       variant: "default" as const,
       icon: Clock,
       customClass: "bg-blue-400 text-white border-blue-500"

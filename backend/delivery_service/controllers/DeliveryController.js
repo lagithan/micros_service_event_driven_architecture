@@ -36,7 +36,7 @@ class DeliveryController {
         });
       }
 
-      const validStatuses = ['Picking', 'PickedUp', 'Delivering', 'Delivered'];
+      const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'];
       if (!validStatuses.includes(deliveryStatus)) {
         return res.status(400).json({
           success: false,
@@ -150,7 +150,7 @@ class DeliveryController {
             order_id: orderId,
             pickedup_date: null,
             delivered_date: null,
-            delivery_status: 'Picking',
+            delivery_status: 'Pending',
             created_at: new Date().toISOString()
           };
         } else {
@@ -196,7 +196,7 @@ class DeliveryController {
         });
       }
 
-      const validStatuses = ['Picking', 'PickedUp', 'Delivering', 'Delivered'];
+      const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'];
       if (!validStatuses.includes(newStatus)) {
         return res.status(400).json({
           success: false,
@@ -402,7 +402,7 @@ class DeliveryController {
               order_id: 'ORD123456',
               delivery_person_id: deliveryPersonId,
               delivery_person_name: 'Mock Delivery Person',
-              delivery_status: 'Picking',
+              delivery_status: 'Pending',
               created_at: new Date().toISOString()
             }
           ];
@@ -458,9 +458,11 @@ class DeliveryController {
           console.log('ℹ️  Database unavailable - returning mock statistics');
           statistics = {
             total_deliveries: '10',
-            picking_deliveries: '3',
-            pickedup_deliveries: '2',
-            delivering_deliveries: '3',
+            pending_deliveries: '3',
+            selected_for_pickup_deliveries: '2',
+            pickedup_from_client_deliveries: '1',
+            inwarehouse_deliveries: '1',
+            pickedup_from_warehouse_deliveries: '1',
             delivered_deliveries: '2',
             cancelled_deliveries: '0',
             avg_delivery_time_hours: '12.5'
@@ -474,9 +476,11 @@ class DeliveryController {
         success: true,
         data: {
           totalDeliveries: parseInt(statistics.total_deliveries),
-          pickingDeliveries: parseInt(statistics.picking_deliveries),
-          pickedUpDeliveries: parseInt(statistics.pickedup_deliveries),
-          deliveringDeliveries: parseInt(statistics.delivering_deliveries),
+          pendingDeliveries: parseInt(statistics.pending_deliveries),
+          selectedForPickupDeliveries: parseInt(statistics.selected_for_pickup_deliveries),
+          pickedupFromClientDeliveries: parseInt(statistics.pickedup_from_client_deliveries),
+          inwarehouseDeliveries: parseInt(statistics.inwarehouse_deliveries),
+          pickedupFromWarehouseDeliveries: parseInt(statistics.pickedup_from_warehouse_deliveries),
           deliveredDeliveries: parseInt(statistics.delivered_deliveries),
           cancelledDeliveries: parseInt(statistics.cancelled_deliveries),
           averageDeliveryTimeHours: parseFloat(statistics.avg_delivery_time_hours) || 0
@@ -654,7 +658,7 @@ class DeliveryController {
             orderId,
             deliveryPersonId,
             deliveryPersonName,
-            status: 'Picking',
+            status: 'Selected_for_pickup',
             timestamp: new Date().toISOString()
           });
         } catch (eventError) {
@@ -699,20 +703,20 @@ class DeliveryController {
     }
   }
 
-  // Update delivery status (PickedUp, Delivering, Delivered)
+  // Update delivery status (New 6-stage workflow)
   static async updateDeliveryStatus(req, res) {
-    try {
-      const { orderId } = req.params;
-      const { status, deliveryPersonId } = req.body;
+    const { orderId } = req.params;
+    const { status, deliveryPersonId } = req.body;
 
+    try {
       console.log('🔄 Status update request received:', {
         orderId,
         status,
         deliveryPersonId
       });
 
-      // Validate status
-      const validStatuses = ['PickedUp', 'Delivering', 'Delivered'];
+      // Validate status - updated to new 6-stage workflow
+      const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'];
       if (!validStatuses.includes(status)) {
         return res.status(400).json({
           success: false,
@@ -721,6 +725,12 @@ class DeliveryController {
       }
 
       // Update status
+      console.log('🔍 About to call DeliveryModel.updateOrderDeliveryStatus with:', {
+        orderId,
+        status,
+        deliveryPersonId
+      });
+      
       const result = await DeliveryModel.updateOrderDeliveryStatus(orderId, status, deliveryPersonId);
 
       console.log('✅ Status updated successfully:', result);
@@ -739,6 +749,13 @@ class DeliveryController {
 
     } catch (error) {
       console.error('❌ Update delivery status error:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        orderId,
+        status,
+        deliveryPersonId
+      });
       res.status(500).json({
         success: false,
         message: 'Failed to update delivery status',

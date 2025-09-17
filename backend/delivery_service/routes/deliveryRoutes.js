@@ -14,7 +14,7 @@ const validateDeliveryCreation = (req, res, next) => {
     });
   }
 
-  const validStatuses = ['Picking', 'PickedUp', 'Delivering', 'Delivered'];
+  const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'];
   if (!validStatuses.includes(deliveryStatus)) {
     return res.status(400).json({
       success: false,
@@ -35,7 +35,7 @@ const validateStatusUpdate = (req, res, next) => {
     });
   }
 
-  const validStatuses = ['Picking', 'PickedUp', 'Delivering', 'Delivered'];
+  const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'];
   if (!validStatuses.includes(newStatus)) {
     return res.status(400).json({
       success: false,
@@ -134,7 +134,7 @@ router.get('/docs', (req, res) => {
             orderId: 'string (required) - Order ID',
             pickedupDate: 'datetime (optional) - Picked up date',
             deliveredDate: 'datetime (optional) - Delivered date',
-            deliveryStatus: 'string (required) - Delivery status (Picking, PickedUp, Delivering, Delivered)'
+            deliveryStatus: 'string (required) - Delivery status (Pending, Selected_for_pickup, Pickedup_from_client, Inwarehouse, Pickedup_from_warehouse, Delivered)'
           }
         },
         {
@@ -151,7 +151,7 @@ router.get('/docs', (req, res) => {
           description: 'Update delivery status',
           parameters: {
             orderId: 'string (required) - Order ID',
-            newStatus: 'string (required) - New status (Picking, PickedUp, Delivering, Delivered)',
+            newStatus: 'string (required) - New status (Pending, Selected_for_pickup, Pickedup_from_client, Inwarehouse, Pickedup_from_warehouse, Delivered)',
             statusChangedBy: 'string (required) - Who changed the status',
             changeReason: 'string (optional) - Reason for status change',
             location: 'string (optional) - Current location'
@@ -188,10 +188,12 @@ router.get('/docs', (req, res) => {
         }
       ],
       deliveryStatuses: [
-        'Picking - Delivery person is picking up the order',
-        'PickedUp - Order has been picked up',
-        'Delivering - Order is being delivered',
-        'Delivered - Order has been delivered'
+        'Pending - Order is waiting to be assigned',
+        'Selected_for_pickup - Order selected by driver, ready for client pickup',
+        'Pickedup_from_client - Order picked up from client, transport to warehouse',
+        'Inwarehouse - Order stored in warehouse, ready for final delivery',
+        'Pickedup_from_warehouse - Order picked up from warehouse for final delivery',
+        'Delivered - Order has been delivered to customer'
       ],
       responseFormat: {
         success: 'boolean - Whether the request was successful',

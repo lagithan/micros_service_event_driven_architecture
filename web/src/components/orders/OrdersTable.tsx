@@ -42,13 +42,20 @@ interface Order {
   createdAt: string;
   trackingNumber?: string;
   priority?: string;
-  items?: any[];
-  paymentStatus?: "paid" | "unpaid" | "pending";
+  items?: OrderItem[];
+  paymentStatus?: "Paid" | "Pending";
   pickupAddress?: string;
   destinationAddress?: string;
   packageDetails?: string;
   specialInstructions?: string;
   orderStatus?: string;
+}
+
+interface OrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  // Add other relevant fields as needed
 }
 
 interface OrdersTableProps {
@@ -94,11 +101,9 @@ export default function OrdersTable({ orders, onOrderView }: OrdersTableProps) {
 
   const getPaymentStatusColor = (paymentStatus: string) => {
     switch (paymentStatus) {
-      case "paid":
+      case "Paid":
         return "bg-success text-success-foreground";
-      case "unpaid":
-        return "bg-destructive text-destructive-foreground";
-      case "pending":
+      case "Pending":
         return "bg-warning text-warning-foreground";
       default:
         return "bg-muted text-muted-foreground";
@@ -323,14 +328,10 @@ export default function OrdersTable({ orders, onOrderView }: OrdersTableProps) {
                   <TableCell>
                     <Badge
                       className={getPaymentStatusColor(
-                        order.paymentStatus || "unpaid"
+                        order.paymentStatus || "Pending"
                       )}
                     >
-                      {order.paymentStatus === "paid"
-                        ? "Paid"
-                        : order.paymentStatus === "pending"
-                        ? "Pending"
-                        : "COD"}
+                      {order.paymentStatus || "Pending"}
                     </Badge>
                   </TableCell>
                   <TableCell>

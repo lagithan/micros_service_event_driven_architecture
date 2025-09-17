@@ -1,0 +1,488 @@
+{
+  "info": {
+    "name": "Microservices Event-Driven Architecture API",
+    "description": "Complete API collection for testing all microservices endpoints",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "authService",
+      "value": "http://localhost:5001",
+      "type": "string"
+    },
+    {
+      "key": "orderService",
+      "value": "http://localhost:5003",
+      "type": "string"
+    },
+    {
+      "key": "clientId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "trackingNumber",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Checks",
+      "item": [
+        {
+          "name": "API Gateway Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Auth Service Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{authService}}/health",
+              "host": ["{{authService}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Order Service Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orderService}}/health",
+              "host": ["{{orderService}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.status === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.profile && jsonData.data.profile.id) {",
+                  "        pm.collectionVariables.set('clientId', jsonData.data.profile.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Business Ltd\",\n  \"email\": \"test@business.com\",\n  \"password\": \"password123\",\n  \"phoneNo\": \"+94771234567\",\n  \"businessType\": \"E-commerce Retailer\",\n  \"city\": \"Colombo\",\n  \"address\": \"123 Main Street, Colombo\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "client", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.status === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.profile && jsonData.data.profile.id) {",
+                  "        pm.collectionVariables.set('clientId', jsonData.data.profile.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@business.com\",\n  \"password\": \"password123\",\n  \"userType\": \"client\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Client Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{clientId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "client", "profile"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Order Management",
+      "item": [
+        {
+          "name": "Create Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.status === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.orderId) {",
+                  "        pm.collectionVariables.set('orderId', jsonData.data.orderId);",
+                  "    }",
+                  "    if (jsonData.data && jsonData.data.trackingNumber) {",
+                  "        pm.collectionVariables.set('trackingNumber', jsonData.data.trackingNumber);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senderName\": \"John Doe\",\n  \"receiverName\": \"Jane Smith\",\n  \"receiverPhone\": \"+94771234568\",\n  \"pickupAddress\": \"123 Sender Street, Colombo 03\",\n  \"destinationAddress\": \"456 Receiver Avenue, Kandy\",\n  \"clientId\": {{clientId}},\n  \"packageDetails\": \"5 items, 2.5kg total. Categories: 2x Electronics (1.0kg), 3x Books (1.5kg). Priority: standard.\",\n  \"specialInstructions\": \"Handle with care - fragile electronics\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get Orders by Client ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/client/{{clientId}}?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "client", "{{clientId}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Orders by Client ID with Status Filter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/client/{{clientId}}?page=1&limit=10&status=Pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "client", "{{clientId}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Pending"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order by Order ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/order/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "order", "{{orderId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Order by Tracking Number",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/tracking/{{trackingNumber}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "tracking", "{{trackingNumber}}"]
+            }
+          }
+        },
+        {
+          "name": "Track Order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/track/{{trackingNumber}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "track", "{{trackingNumber}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Order Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/statistics?clientId={{clientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "statistics"],
+              "query": [
+                {
+                  "key": "clientId",
+                  "value": "{{clientId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Order Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newStatus\": \"PickedUp\",\n  \"statusChangedBy\": \"Test Driver\",\n  \"changeReason\": \"Package picked up from sender location\",\n  \"location\": \"Colombo 03\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"Customer requested cancellation\",\n  \"cancelledBy\": \"Test Client\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}", "cancel"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Direct Service Calls",
+      "description": "Direct calls to individual services (bypassing API Gateway)",
+      "item": [
+        {
+          "name": "Direct - Auth Service Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{authService}}/info",
+              "host": ["{{authService}}"],
+              "path": ["info"]
+            }
+          }
+        },
+        {
+          "name": "Direct - Order Service Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orderService}}/info",
+              "host": ["{{orderService}}"],
+              "path": ["info"]
+            }
+          }
+        },
+        {
+          "name": "Direct - Get Client Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{clientId}}\n}"
+            },
+            "url": {
+              "raw": "{{authService}}/api/client/profile",
+              "host": ["{{authService}}"],
+              "path": ["api", "client", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Direct - Get Orders by Client",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orderService}}/api/orders/client/{{clientId}}?page=1&limit=20",
+              "host": ["{{orderService}}"],
+              "path": ["api", "orders", "client", "{{clientId}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Data Generation",
+      "item": [
+        {
+          "name": "Create Multiple Test Orders",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senderName\": \"Alice Johnson\",\n  \"receiverName\": \"Bob Wilson\",\n  \"receiverPhone\": \"+94771234569\",\n  \"pickupAddress\": \"789 Business Center, Colombo 02\",\n  \"destinationAddress\": \"321 Home Street, Galle\",\n  \"clientId\": {{clientId}},\n  \"packageDetails\": \"3 items, 1.8kg total. Categories: 1x Electronics (0.8kg), 2x Clothing (1.0kg). Priority: express.\",\n  \"specialInstructions\": \"Deliver before 5 PM\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Create Urgent Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senderName\": \"Emergency Sender\",\n  \"receiverName\": \"Urgent Receiver\",\n  \"receiverPhone\": \"+94771234570\",\n  \"pickupAddress\": \"Emergency Pickup Location, Colombo 01\",\n  \"destinationAddress\": \"Critical Delivery Point, Negombo\",\n  \"clientId\": {{clientId}},\n  \"packageDetails\": \"1 items, 0.5kg total. Categories: 1x Medical Supplies (0.5kg). Priority: urgent.\",\n  \"specialInstructions\": \"URGENT - Medical supplies for hospital\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

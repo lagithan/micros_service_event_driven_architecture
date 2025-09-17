@@ -35,7 +35,7 @@ class OrderModel {
       const orderId = this.generateOrderId();
       const trackingNumber = this.generateTrackingNumber();
       
-      const queries = [
+        const queries = [
         // Insert order
         {
           text: `
@@ -43,16 +43,16 @@ class OrderModel {
               order_id, sender_name, receiver_name, receiver_phone,
               pickup_address, destination_address, user_id, client_id,
               package_details, special_instructions, estimated_delivery_date,
-              tracking_number, order_status, created_at, updated_at
+              tracking_number, order_status, cash_paid, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             RETURNING *
           `,
           params: [
             orderId, senderName, receiverName, receiverPhone,
             pickupAddress, destinationAddress, userId, clientId,
             packageDetails, specialInstructions, estimatedDeliveryDate,
-            trackingNumber, 'Pending'
+            trackingNumber, 'Pending', false
           ]
         },
         // Insert initial status history
@@ -94,7 +94,7 @@ class OrderModel {
       const queryText = `
         SELECT 
           id, order_id, sender_name, receiver_name, receiver_phone,
-          pickup_address, destination_address, order_status, user_id,
+          pickup_address, destination_address, order_status, cash_paid, user_id,
           client_id, driver_id, package_details, special_instructions,
           estimated_delivery_date, actual_pickup_date, actual_delivery_date,
           tracking_number, created_at, updated_at
@@ -115,7 +115,7 @@ class OrderModel {
       const queryText = `
         SELECT 
           id, order_id, sender_name, receiver_name, receiver_phone,
-          pickup_address, destination_address, order_status, user_id,
+          pickup_address, destination_address, order_status, cash_paid, user_id,
           client_id, driver_id, package_details, special_instructions,
           estimated_delivery_date, actual_pickup_date, actual_delivery_date,
           tracking_number, created_at, updated_at
@@ -136,7 +136,7 @@ class OrderModel {
       const queryText = `
         SELECT 
           id, order_id, sender_name, receiver_name, receiver_phone,
-          pickup_address, destination_address, order_status, user_id,
+          pickup_address, destination_address, order_status, cash_paid, user_id,
           client_id, driver_id, package_details, special_instructions,
           estimated_delivery_date, actual_pickup_date, actual_delivery_date,
           tracking_number, created_at, updated_at
@@ -157,7 +157,7 @@ class OrderModel {
       const queryText = `
         SELECT 
           id, order_id, sender_name, receiver_name, receiver_phone,
-          pickup_address, destination_address, order_status, user_id,
+          pickup_address, destination_address, order_status, cash_paid, user_id,
           client_id, driver_id, package_details, special_instructions,
           estimated_delivery_date, actual_pickup_date, actual_delivery_date,
           tracking_number, created_at, updated_at
@@ -180,7 +180,7 @@ class OrderModel {
       const queryText = `
         SELECT 
           id, order_id, sender_name, receiver_name, receiver_phone,
-          pickup_address, destination_address, order_status, user_id,
+          pickup_address, destination_address, order_status, cash_paid, user_id,
           client_id, driver_id, package_details, special_instructions,
           estimated_delivery_date, actual_pickup_date, actual_delivery_date,
           tracking_number, created_at, updated_at
@@ -203,7 +203,7 @@ class OrderModel {
       const queryText = `
         SELECT 
           id, order_id, sender_name, receiver_name, receiver_phone,
-          pickup_address, destination_address, order_status, user_id,
+          pickup_address, destination_address, order_status, cash_paid, user_id,
           client_id, driver_id, package_details, special_instructions,
           estimated_delivery_date, actual_pickup_date, actual_delivery_date,
           tracking_number, created_at, updated_at
@@ -232,9 +232,11 @@ class OrderModel {
       
       // Validate status transition
       const validTransitions = {
-        'Pending': ['PickedUp', 'Cancelled'],
-        'PickedUp': ['OnWarehouse', 'Delivered', 'Cancelled'],
-        'OnWarehouse': ['Delivered', 'Cancelled'],
+        'Pending': ['Selected_for_pickup', 'Cancelled'],
+        'Selected_for_pickup': ['Pickedup_from_client', 'Cancelled'],
+        'Pickedup_from_client': ['Inwarehouse', 'Cancelled'],
+        'Inwarehouse': ['Pickedup_from_warehouse', 'Cancelled'],
+        'Pickedup_from_warehouse': ['Delivered', 'Cancelled'],
         'Delivered': [], // Final state
         'Cancelled': [] // Final state
       };
@@ -251,7 +253,7 @@ class OrderModel {
             SET 
               order_status = $2, 
               driver_id = COALESCE($3, driver_id),
-              actual_pickup_date = CASE WHEN $2 = 'PickedUp' THEN CURRENT_TIMESTAMP ELSE actual_pickup_date END,
+              actual_pickup_date = CASE WHEN $2 = 'Pickedup_from_client' THEN CURRENT_TIMESTAMP ELSE actual_pickup_date END,
               actual_delivery_date = CASE WHEN $2 = 'Delivered' THEN CURRENT_TIMESTAMP ELSE actual_delivery_date END,
               updated_at = CURRENT_TIMESTAMP
             WHERE order_id = $1
@@ -310,7 +312,7 @@ class OrderModel {
       const queryText = `
         SELECT 
           id, order_id, sender_name, receiver_name, receiver_phone,
-          pickup_address, destination_address, order_status, user_id,
+          pickup_address, destination_address, order_status, cash_paid, user_id,
           client_id, driver_id, package_details, special_instructions,
           estimated_delivery_date, actual_pickup_date, actual_delivery_date,
           tracking_number, created_at, updated_at
@@ -374,8 +376,10 @@ class OrderModel {
         SELECT 
           COUNT(*) as total_orders,
           COUNT(CASE WHEN order_status = 'Pending' THEN 1 END) as pending_orders,
-          COUNT(CASE WHEN order_status = 'PickedUp' THEN 1 END) as picked_up_orders,
-          COUNT(CASE WHEN order_status = 'OnWarehouse' THEN 1 END) as warehouse_orders,
+          COUNT(CASE WHEN order_status = 'Selected_for_pickup' THEN 1 END) as selected_for_pickup_orders,
+          COUNT(CASE WHEN order_status = 'Pickedup_from_client' THEN 1 END) as pickedup_from_client_orders,
+          COUNT(CASE WHEN order_status = 'Inwarehouse' THEN 1 END) as warehouse_orders,
+          COUNT(CASE WHEN order_status = 'Pickedup_from_warehouse' THEN 1 END) as pickedup_from_warehouse_orders,
           COUNT(CASE WHEN order_status = 'Delivered' THEN 1 END) as delivered_orders,
           COUNT(CASE WHEN order_status = 'Cancelled' THEN 1 END) as cancelled_orders,
           AVG(

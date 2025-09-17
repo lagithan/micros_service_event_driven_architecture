@@ -27,9 +27,34 @@ const connectDatabase = async () => {
         order_id VARCHAR(100) NOT NULL,
         delivered_date TIMESTAMP,
         pickedup_date TIMESTAMP,
-        delivery_status VARCHAR(20) NOT NULL CHECK (delivery_status IN ('Picking', 'PickedUp', 'Delivering', 'Delivered'))
+        delivery_status VARCHAR(30) NOT NULL CHECK (delivery_status IN ('Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'))
       )
     `);
+
+    // Update existing constraint if table already exists
+    try {
+      console.log('🔄 Updating delivery_status constraint...');
+      await client.query(`
+        ALTER TABLE Order_Delivery_Table 
+        DROP CONSTRAINT IF EXISTS order_delivery_table_delivery_status_check;
+      `);
+      
+      await client.query(`
+        ALTER TABLE Order_Delivery_Table 
+        ADD CONSTRAINT order_delivery_table_delivery_status_check 
+        CHECK (delivery_status IN ('Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'));
+      `);
+      
+      await client.query(`
+        ALTER TABLE Order_Delivery_Table 
+        ALTER COLUMN delivery_status TYPE VARCHAR(30);
+      `);
+      
+      console.log('✅ Delivery status constraint updated successfully');
+    } catch (constraintError) {
+      console.log('ℹ️  Constraint update info:', constraintError.message);
+      // Don't throw error - table might be new
+    }
 
     // Create indexes for better performance
     await client.query(`
