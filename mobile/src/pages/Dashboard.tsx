@@ -17,7 +17,7 @@ interface Delivery {
   receiverName?: string;
   address?: string;
   phone?: string;
-  status: "select" | "picking_up" | "picked_up" | "delivering" | "delivered";
+  status: "pending" | "selected_for_pickup" | "pickedup_from_client" | "inwarehouse" | "pickedup_from_warehouse" | "delivered";
   estimatedTime?: string;
   items?: { name: string; quantity: number }[];
   notes?: string;
@@ -81,34 +81,42 @@ interface BackendOrderData {
 }
 
 // Helper function to map backend status to frontend status
-const mapDeliveryStatus = (backendStatus: string): "select" | "picking_up" | "picked_up" | "delivering" | "delivered" => {
+const mapDeliveryStatus = (backendStatus: string): "pending" | "selected_for_pickup" | "pickedup_from_client" | "inwarehouse" | "pickedup_from_warehouse" | "delivered" => {
   switch (backendStatus) {
-    case 'Picking':
-      return 'picking_up';
-    case 'PickedUp':
-      return 'picked_up';
-    case 'Delivering':
-      return 'delivering';
+    case 'Pending':
+      return 'pending';
+    case 'Selected_for_pickup':
+      return 'selected_for_pickup';
+    case 'Pickedup_from_client':
+      return 'pickedup_from_client';
+    case 'Inwarehouse':
+      return 'inwarehouse';
+    case 'Pickedup_from_warehouse':
+      return 'pickedup_from_warehouse';
     case 'Delivered':
       return 'delivered';
     default:
-      return 'select';
+      return 'pending';
   }
 };
 
 // Helper function to map frontend status to backend status
-const mapToBackendStatus = (frontendStatus: string): 'Picking' | 'PickedUp' | 'Delivering' | 'Delivered' => {
+const mapToBackendStatus = (frontendStatus: string): 'Pending' | 'Selected_for_pickup' | 'Pickedup_from_client' | 'Inwarehouse' | 'Pickedup_from_warehouse' | 'Delivered' => {
   switch (frontendStatus) {
-    case 'picking_up':
-      return 'Picking';
-    case 'picked_up':
-      return 'PickedUp';
-    case 'delivering':
-      return 'Delivering';
+    case 'pending':
+      return 'Pending';
+    case 'selected_for_pickup':
+      return 'Selected_for_pickup';
+    case 'pickedup_from_client':
+      return 'Pickedup_from_client';
+    case 'inwarehouse':
+      return 'Inwarehouse';
+    case 'pickedup_from_warehouse':
+      return 'Pickedup_from_warehouse';
     case 'delivered':
       return 'Delivered';
     default:
-      return 'Picking';
+      return 'Pending';
   }
 };
 
@@ -124,6 +132,7 @@ const Dashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
   const [proofModalOpen, setProofModalOpen] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
   // Check authentication
   useEffect(() => {
@@ -151,7 +160,9 @@ const Dashboard = () => {
   // Fetch assigned deliveries from API
   const fetchDeliveries = useCallback(async () => {
     try {
+      console.log('🔄 Fetching my deliveries...');
       const response = await DeliveryService.getMyDeliveries();
+      console.log('📥 Raw deliveries response:', response);
       
       if (response.success && Array.isArray(response.data)) {
         // Transform backend delivery data from our new API structure
@@ -202,7 +213,9 @@ const Dashboard = () => {
   // Fetch available orders for pickup
   const fetchAvailableOrders = useCallback(async () => {
     try {
+      console.log('🔄 Fetching available orders...');
       const response = await DeliveryService.getAvailableOrders();
+      console.log('📥 Raw available orders response:', response);
       
       if (response.success && Array.isArray(response.data)) {
         // Transform the backend data to match our frontend interface
@@ -218,10 +231,11 @@ const Dashboard = () => {
           packageDetails: order.packageDetails || order.package_details,
           specialInstructions: order.specialInstructions || order.special_instructions,
           estimatedDeliveryDate: order.estimatedDeliveryDate || order.estimated_delivery_date,
-          status: "select" as const,
+          status: "pending" as const,
           createdAt: order.createdAt || order.created_at
         }));
         
+        console.log('✅ Transformed available orders:', transformedOrders);
         setAvailableOrders(transformedOrders);
       } else if (response.success && !Array.isArray(response.data)) {
         console.log('Available orders API returned non-array data:', response.data);
@@ -273,12 +287,26 @@ const Dashboard = () => {
   };
 
   const selectDeliveries = availableOrders; // Use available orders for selection
-  const pickingUpDeliveries = deliveries.filter(d => d.status === "picking_up");
-  const pickedUpDeliveries = deliveries.filter(d => d.status === "picked_up");
-  const deliveringDeliveries = deliveries.filter(d => d.status === "delivering");
+  const selectedForPickupDeliveries = deliveries.filter(d => d.status === "selected_for_pickup");
+  const pickedUpFromClientDeliveries = deliveries.filter(d => d.status === "pickedup_from_client");
+  const inWarehouseDeliveries = deliveries.filter(d => d.status === "inwarehouse");
+  const pickedUpFromWarehouseDeliveries = deliveries.filter(d => d.status === "pickedup_from_warehouse");
   const completedToday = deliveries.filter(d => d.status === "delivered").length;
 
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 Data Analysis:');
+    console.log('Available Orders:', selectDeliveries.length, selectDeliveries);
+    console.log('Selected for Pickup:', selectedForPickupDeliveries.length, selectedForPickupDeliveries);
+    console.log('Picked up from Client:', pickedUpFromClientDeliveries.length, pickedUpFromClientDeliveries);
+    console.log('In Warehouse:', inWarehouseDeliveries.length, inWarehouseDeliveries);
+    console.log('Out for Delivery:', pickedUpFromWarehouseDeliveries.length, pickedUpFromWarehouseDeliveries);
+    console.log('Completed Today:', completedToday);
+    console.log('All Deliveries:', deliveries.map(d => ({ id: d.id, orderId: d.orderId, status: d.status })));
+  }, [selectDeliveries, selectedForPickupDeliveries, pickedUpFromClientDeliveries, inWarehouseDeliveries, pickedUpFromWarehouseDeliveries, completedToday, deliveries]);
+
   const updateDeliveryStatus = async (deliveryId: string, status: Delivery["status"]) => {
+    setUpdatingStatus(deliveryId);
     try {
       const backendStatus = mapToBackendStatus(status);
       const response = await DeliveryService.updateStatus(deliveryId, backendStatus);
@@ -291,11 +319,16 @@ const Dashboard = () => {
           )
         );
         
+        // Refresh data to ensure UI is in sync
+        await fetchAllData();
+        
         // Success message based on status
         const statusMessages = {
-          picking_up: "Ready for pickup! Go to restaurant to pick up the order.",
-          picked_up: "Order picked up! Now go for delivery.",
-          delivering: "Delivering! En route to customer.",
+          pending: "Order is pending assignment.",
+          selected_for_pickup: "Selected for pickup! Go to client location.",
+          pickedup_from_client: "Order picked up from client! Take to warehouse.",
+          inwarehouse: "Order is now in warehouse storage.",
+          pickedup_from_warehouse: "Order picked up from warehouse! Deliver to customer.",
           delivered: "Order delivered successfully!"
         };
         
@@ -317,12 +350,19 @@ const Dashboard = () => {
         description: "Unable to update status. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      setUpdatingStatus(null);
     }
   };
 
   const handleSelectForPickup = async (orderId: string) => {
     try {
+      console.log('🔄 Attempting to assign order:', orderId);
+      console.log('🔄 Driver data:', TokenManager.getDriver());
+      
       const response = await DeliveryService.assignOrder(orderId);
+      
+      console.log('✅ Assignment response:', response);
       
       if (response.success) {
         toast({
@@ -332,6 +372,7 @@ const Dashboard = () => {
         // Refresh data to update the UI
         await fetchAllData();
       } else {
+        console.error('❌ Assignment failed:', response.message);
         toast({
           title: "Assignment Failed",
           description: response.message || "Failed to assign order",
@@ -348,12 +389,16 @@ const Dashboard = () => {
     }
   };
 
-  const handlePickedUp = (deliveryId: string) => {
-    updateDeliveryStatus(deliveryId, "picked_up");
+  const handlePickedUpFromClient = (deliveryId: string) => {
+    updateDeliveryStatus(deliveryId, "pickedup_from_client");
   };
 
-  const handleGoForDelivery = (deliveryId: string) => {
-    updateDeliveryStatus(deliveryId, "delivering");
+  const handleMoveToWarehouse = (deliveryId: string) => {
+    updateDeliveryStatus(deliveryId, "inwarehouse");
+  };
+
+  const handlePickupFromWarehouse = (deliveryId: string) => {
+    updateDeliveryStatus(deliveryId, "pickedup_from_warehouse");
   };
 
   const handleMarkDelivered = (delivery: Delivery) => {
@@ -477,11 +522,11 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* Select for Pickup */}
+        {/* Available Orders (Pending Status) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              Select for Pickup
+              Available Orders
               <span className="text-sm font-normal text-muted-foreground">
                 {selectDeliveries.length} items
               </span>
@@ -491,7 +536,7 @@ const Dashboard = () => {
             {selectDeliveries.length === 0 ? (
               <div className="text-center py-8">
                 <Package className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">No orders to select</p>
+                <p className="text-muted-foreground">No orders available</p>
               </div>
             ) : (
               selectDeliveries.map((delivery) => (
@@ -502,7 +547,7 @@ const Dashboard = () => {
                       <h3 className="text-lg font-semibold text-blue-800">
                         Order #{delivery.orderId}
                       </h3>
-                      <StatusBadge status="select" />
+                      <StatusBadge status="pending" />
                     </div>
 
                     {/* Sender & Receiver Info */}
@@ -595,30 +640,28 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Picking Up */}
-        {pickingUpDeliveries.length > 0 && (
+        {/* Selected for Pickup */}
+        {selectedForPickupDeliveries.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                Picking Up
+                Selected for Pickup
                 <span className="text-sm font-normal text-muted-foreground">
-                  {pickingUpDeliveries.length} items
+                  {selectedForPickupDeliveries.length} items
                 </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {pickingUpDeliveries.map((delivery) => (
+              {selectedForPickupDeliveries.map((delivery) => (
                 <Card key={delivery.id} className="border-2 border-dashed border-blue-300 bg-blue-50/50">
                   <CardContent className="p-4 space-y-3">
-                    {/* Header with Order ID */}
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-semibold text-blue-800">
                         Order #{delivery.orderId}
                       </h3>
-                      <StatusBadge status="picking_up" />
+                      <StatusBadge status="selected_for_pickup" />
                     </div>
 
-                    {/* Customer Info */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-700">📤 From: {delivery.customerName}</span>
@@ -631,27 +674,32 @@ const Dashboard = () => {
 
                     <Separator />
 
-                    {/* Addresses */}
                     <div className="space-y-2">
                       <div className="text-sm">
-                        <p className="font-medium text-green-700">📍 Pickup: {delivery.pickupAddress}</p>
-                        <p className="font-medium text-red-700">🏁 Deliver: {delivery.deliveryAddress}</p>
+                        <span className="font-medium text-green-700">📍 Pickup Address:</span>
+                        <p className="text-gray-600">{delivery.pickupAddress}</p>
                       </div>
                     </div>
 
-                    {/* Package Details */}
                     {delivery.packageDetails && (
                       <div className="text-sm bg-gray-50 p-2 rounded border">
                         📦 {delivery.packageDetails}
                       </div>
                     )}
 
-                    {/* Action Button */}
                     <Button 
-                      onClick={() => handlePickedUp(delivery.id)} 
+                      onClick={() => handlePickedUpFromClient(delivery.id)} 
                       className="w-full bg-blue-600 hover:bg-blue-700"
+                      disabled={updatingStatus === delivery.id}
                     >
-                      ✅ Mark as Picked Up
+                      {updatingStatus === delivery.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Updating...
+                        </>
+                      ) : (
+                        "✅ Mark as Picked up from Client"
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
@@ -660,30 +708,28 @@ const Dashboard = () => {
           </Card>
         )}
 
-        {/* Picked Up */}
-        {pickedUpDeliveries.length > 0 && (
+        {/* Picked up from Client */}
+        {pickedUpFromClientDeliveries.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                Picked Up
+                Picked up from Client
                 <span className="text-sm font-normal text-muted-foreground">
-                  {pickedUpDeliveries.length} items
+                  {pickedUpFromClientDeliveries.length} items
                 </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {pickedUpDeliveries.map((delivery) => (
+              {pickedUpFromClientDeliveries.map((delivery) => (
                 <Card key={delivery.id} className="border-2 border-dashed border-blue-200 bg-blue-50/50">
                   <CardContent className="p-4 space-y-3">
-                    {/* Header with Order ID */}
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-semibold text-blue-800">
-                        Order #{delivery.orderId} - Ready for Delivery
+                        Order #{delivery.orderId} - Transport to Warehouse
                       </h3>
-                      <StatusBadge status="picked_up" />
+                      <StatusBadge status="pickedup_from_client" />
                     </div>
 
-                    {/* Customer Info */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-700">📤 From: {delivery.customerName}</span>
@@ -696,31 +742,92 @@ const Dashboard = () => {
 
                     <Separator />
 
-                    {/* Delivery Address */}
                     <div className="space-y-2">
-                      <p className="font-medium text-red-700">🏁 Deliver to: {delivery.deliveryAddress}</p>
+                      <p className="font-medium text-blue-700">🏢 Take to Warehouse</p>
                     </div>
 
-                    {/* Package Details */}
                     {delivery.packageDetails && (
                       <div className="text-sm bg-gray-50 p-2 rounded border">
                         📦 {delivery.packageDetails}
                       </div>
                     )}
 
-                    {/* Special Instructions */}
+                    <Button 
+                      onClick={() => handleMoveToWarehouse(delivery.id)} 
+                      className="w-full bg-blue-600 hover:bg-blue-700"
+                      disabled={updatingStatus === delivery.id}
+                    >
+                      {updatingStatus === delivery.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Moving...
+                        </>
+                      ) : (
+                        "🏢 Move to Warehouse"
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* In Warehouse */}
+        {inWarehouseDeliveries.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                In Warehouse
+                <span className="text-sm font-normal text-muted-foreground">
+                  {inWarehouseDeliveries.length} items
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {inWarehouseDeliveries.map((delivery) => (
+                <Card key={delivery.id} className="border-2 border-solid border-blue-300 bg-blue-50/50">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-blue-800">
+                        Order #{delivery.orderId} - Ready for Final Delivery
+                      </h3>
+                      <StatusBadge status="inwarehouse" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">📤 From: {delivery.customerName}</span>
+                        <span className="text-sm font-medium text-gray-700">📥 To: {delivery.receiverName}</span>
+                      </div>
+                      {delivery.phone && (
+                        <p className="text-sm text-gray-600">📞 {delivery.phone}</p>
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-2">
+                      <p className="font-medium text-blue-700">🏁 Final Delivery to: {delivery.deliveryAddress}</p>
+                    </div>
+
+                    {delivery.packageDetails && (
+                      <div className="text-sm bg-gray-50 p-2 rounded border">
+                        📦 {delivery.packageDetails}
+                      </div>
+                    )}
+
                     {delivery.specialInstructions && (
                       <div className="text-sm bg-yellow-50 p-2 rounded border border-yellow-200">
                         ⚠️ {delivery.specialInstructions}
                       </div>
                     )}
 
-                    {/* Action Button */}
                     <Button 
-                      onClick={() => handleGoForDelivery(delivery.id)} 
+                      onClick={() => handlePickupFromWarehouse(delivery.id)} 
                       className="w-full bg-blue-600 hover:bg-blue-700"
                     >
-                      🚚 Start Delivery
+                      � Pickup from Warehouse
                     </Button>
                   </CardContent>
                 </Card>
@@ -729,30 +836,28 @@ const Dashboard = () => {
           </Card>
         )}
 
-        {/* Delivering */}
-        {deliveringDeliveries.length > 0 && (
+        {/* Picked up from Warehouse - Final Delivery */}
+        {pickedUpFromWarehouseDeliveries.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                Delivering
+                Out for Delivery
                 <span className="text-sm font-normal text-muted-foreground">
-                  {deliveringDeliveries.length} items
+                  {pickedUpFromWarehouseDeliveries.length} items
                 </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {deliveringDeliveries.map((delivery) => (
+              {pickedUpFromWarehouseDeliveries.map((delivery) => (
                 <Card key={delivery.id} className="border-2 border-solid border-blue-400 bg-blue-50/50">
                   <CardContent className="p-4 space-y-3">
-                    {/* Header with Order ID */}
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-semibold text-blue-800">
-                        Order #{delivery.orderId} - En Route
+                        Order #{delivery.orderId} - En Route to Customer
                       </h3>
-                      <StatusBadge status="delivering" />
+                      <StatusBadge status="pickedup_from_warehouse" />
                     </div>
 
-                    {/* Customer Info */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-700">📥 Delivering to: {delivery.receiverName}</span>
@@ -764,26 +869,22 @@ const Dashboard = () => {
 
                     <Separator />
 
-                    {/* Delivery Address */}
                     <div className="space-y-2">
                       <p className="font-medium text-blue-700">🏁 Address: {delivery.deliveryAddress}</p>
                     </div>
 
-                    {/* Package Details */}
                     {delivery.packageDetails && (
                       <div className="text-sm bg-gray-50 p-2 rounded border">
                         📦 {delivery.packageDetails}
                       </div>
                     )}
 
-                    {/* Special Instructions */}
                     {delivery.specialInstructions && (
                       <div className="text-sm bg-yellow-50 p-2 rounded border border-yellow-200">
                         ⚠️ {delivery.specialInstructions}
                       </div>
                     )}
 
-                    {/* Action Buttons */}
                     <div className="space-y-2">
                       <Button 
                         onClick={() => handleMarkDelivered(delivery)} 

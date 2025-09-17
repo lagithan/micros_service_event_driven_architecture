@@ -279,9 +279,14 @@ export class AuthService {
 
   static async getProfile(): Promise<AuthResponse> {
     try {
+      const client = TokenManager.getClient()
+      if (!client?.id) {
+        throw new Error('No client session found. Please log in again.')
+      }
+
       const response = await HttpClient.post<AuthResponse>(
         `${API_CONFIG.BASE_URL}/api/client/profile`,
-        {}
+        { userId: client.id }
       );
       
       if (response.success && response.data?.profile) {
@@ -411,6 +416,10 @@ export class OrderService {
       const client = TokenManager.getClient();
       const targetClientId = clientId || client?.id;
       
+      console.log('Getting client orders - Input clientId:', clientId);
+      console.log('Client from storage:', client);
+      console.log('Target clientId:', targetClientId);
+      
       if (!targetClientId) {
         throw new Error('Client ID not found - please log in again');
       }
@@ -424,9 +433,10 @@ export class OrderService {
         params.append('status', status);
       }
 
-      const response = await HttpClient.get<OrdersListResponse>(
-        `${this.ORDER_ENDPOINT}/client/${targetClientId}?${params.toString()}`
-      );
+      const url = `${this.ORDER_ENDPOINT}/client/${targetClientId}?${params.toString()}`;
+      console.log('Making request to:', url);
+
+      const response = await HttpClient.get<OrdersListResponse>(url);
       
       console.log('Client orders response:', response);
       return response;

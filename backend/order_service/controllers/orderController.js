@@ -8,7 +8,7 @@ try {
   publishOrderStatusUpdatedEvent = kafka.publishOrderStatusUpdatedEvent;
   publishOrderCancelledEvent = kafka.publishOrderCancelledEvent;
 } catch (error) {
-  console.warn('⚠️  Kafka module not available, events will not be published');
+  console.warn('⚠️  Kafka module not available - using stub functions. Events will not be published');
   publishOrderCreatedEvent = async () => { console.log('ℹ️  Kafka not available - order created event not published'); };
   publishOrderStatusUpdatedEvent = async () => { console.log('ℹ️  Kafka not available - order status event not published'); };
   publishOrderCancelledEvent = async () => { console.log('ℹ️  Kafka not available - order cancelled event not published'); };
@@ -79,7 +79,8 @@ class OrderController {
             receiver_phone: receiverPhone,
             pickup_address: pickupAddress,
             destination_address: destinationAddress,
-            order_status: 'Pending',
+            order_status: 'pending',
+            cash_paid: false,
             user_id: userId,
             client_id: clientId,
             package_details: packageDetails,
@@ -127,6 +128,7 @@ class OrderController {
           pickupAddress: newOrder.pickup_address,
           destinationAddress: newOrder.destination_address,
           orderStatus: newOrder.order_status,
+          paymentStatus: newOrder.cash_paid ? 'Paid' : 'Pending',
           userId: newOrder.user_id,
           clientId: newOrder.client_id,
           packageDetails: newOrder.package_details,
@@ -209,6 +211,7 @@ class OrderController {
           pickupAddress: order.pickup_address,
           destinationAddress: order.destination_address,
           orderStatus: order.order_status,
+          paymentStatus: order.cash_paid ? 'Paid' : 'Pending',
           userId: order.user_id,
           clientId: order.client_id,
           driverId: order.driver_id,
@@ -333,7 +336,7 @@ class OrderController {
         });
       }
 
-      const validStatuses = ['Pending', 'PickedUp', 'OnWarehouse', 'Delivered', 'Cancelled'];
+      const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered', 'Cancelled'];
       if (!validStatuses.includes(newStatus)) {
         return res.status(400).json({
           success: false,
@@ -424,16 +427,27 @@ class OrderController {
     }
   }
 
-  // Get orders for a user
+  // Get orders for a user, client, or driver
   static async getUserOrders(req, res) {
     try {
-      const { userId } = req.params;
+      const { userId, clientId, driverId } = req.params;
       const { page = 1, limit = 20, status } = req.query;
 
-      if (!userId) {
+      // Determine which ID we're using and validate
+      let targetId, queryType;
+      if (userId) {
+        targetId = userId;
+        queryType = 'user';
+      } else if (clientId) {
+        targetId = clientId;
+        queryType = 'client';
+      } else if (driverId) {
+        targetId = driverId;
+        queryType = 'driver';
+      } else {
         return res.status(400).json({
           success: false,
-          message: 'userId is required'
+          message: 'userId, clientId, or driverId is required'
         });
       }
 
@@ -442,17 +456,23 @@ class OrderController {
       let orders;
 
       try {
-        if (status) {
-          // Get orders by user and status
-          orders = await OrderModel.findByUserId(userId, parseInt(limit), offset);
-          orders = orders.filter(order => order.order_status === status);
+        // Use the appropriate model method based on query type
+        if (queryType === 'client') {
+          orders = await OrderModel.findByClientId(targetId, parseInt(limit), offset);
+        } else if (queryType === 'driver') {
+          orders = await OrderModel.findByDriverId(targetId, parseInt(limit), offset);
         } else {
-          // Get all orders by user
-          orders = await OrderModel.findByUserId(userId, parseInt(limit), offset);
+          // Default to user
+          orders = await OrderModel.findByUserId(targetId, parseInt(limit), offset);
+        }
+
+        // Apply status filter if provided
+        if (status && status !== 'all') {
+          orders = orders.filter(order => order.order_status === status);
         }
 
       } catch (dbError) {
-        console.error('Database error during user orders fetch:', dbError.message);
+        console.error('Database error during orders fetch:', dbError.message);
         
         if (dbError.message.includes('connect') || dbError.code === 'ECONNREFUSED') {
           console.log('ℹ️  Database unavailable - returning mock orders');
@@ -461,9 +481,12 @@ class OrderController {
               id: 1,
               order_id: 'ORD123456',
               tracking_number: 'ST12345678ABCD',
+              sender_name: 'Mock Sender',
               receiver_name: 'Mock Receiver',
               order_status: 'Pending',
-              created_at: new Date().toISOString()
+              created_at: new Date().toISOString(),
+              client_id: targetId,
+              user_id: targetId
             }
           ];
         } else {
@@ -484,9 +507,13 @@ class OrderController {
             pickupAddress: order.pickup_address,
             destinationAddress: order.destination_address,
             orderStatus: order.order_status,
+            paymentStatus: order.cash_paid ? 'Paid' : 'Pending',
             packageDetails: order.package_details,
+            specialInstructions: order.special_instructions,
             estimatedDeliveryDate: order.estimated_delivery_date,
-            createdAt: order.created_at
+            createdAt: order.created_at,
+            clientId: order.client_id,
+            userId: order.user_id
           })),
           pagination: {
             currentPage: parseInt(page),
@@ -497,7 +524,7 @@ class OrderController {
       });
 
     } catch (error) {
-      console.error('Get user orders error:', error);
+      console.error('Get orders error:', error);
       res.status(500).json({
         success: false,
         message: 'Internal server error',

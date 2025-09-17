@@ -177,7 +177,7 @@ class WarehouseEventHandler {
       console.log(`🏭 Handling warehouse status update: ${newStatus} for order ${orderId}`);
       
       // Simulate WMS acknowledgment and processing
-      if (newStatus === 'OnWarehouse') {
+      if (newStatus === 'Inwarehouse') {
         console.log('📦 Order arrived at warehouse - simulating WMS processing...');
         
         // Simulate WMS processing delay
@@ -188,13 +188,13 @@ class WarehouseEventHandler {
         
         try {
           await this.orderServiceClient.updateOrderStatus(orderNumber, {
-            newStatus: 'OnWarehouse',
+            newStatus: 'Inwarehouse',
             statusChangedBy: 'warehouse-adapter',
             changeReason: 'Confirmed arrival at warehouse by WMS',
             location: 'Main Warehouse'
           });
           
-          console.log(`✅ Order ${orderId} status confirmed as OnWarehouse in Order Service`);
+          console.log(`✅ Order ${orderId} status confirmed as Inwarehouse in Order Service`);
           
         } catch (apiError) {
           console.error(`❌ Failed to update Order Service for order ${orderId}:`, apiError.message);
@@ -205,8 +205,8 @@ class WarehouseEventHandler {
       }
       
       // Handle other warehouse statuses
-      else if (newStatus === 'PickedUp') {
-        console.log('🚚 Order picked up by driver - notifying WMS...');
+      else if (newStatus === 'Pickedup_from_warehouse') {
+        console.log('🚚 Order picked up by driver from warehouse - notifying WMS...');
         
         // Send warehouse assignment message
         const warehouseMessage = TCPMessageFormatter.formatWarehouseAssignment({
@@ -227,7 +227,7 @@ class WarehouseEventHandler {
 
   // Check if status is warehouse-related
   isWarehouseStatus(status) {
-    const warehouseStatuses = ['OnWarehouse', 'PickedUp'];
+    const warehouseStatuses = ['Inwarehouse', 'Pickedup_from_warehouse'];
     return warehouseStatuses.includes(status);
   }
 

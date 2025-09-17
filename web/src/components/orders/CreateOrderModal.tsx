@@ -20,7 +20,23 @@ interface OrderItem {
 interface CreateOrderModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onOrderCreate: (order: any) => void
+  onOrderCreate: (order: {
+    id: string
+    customerName: string
+    receiverName: string
+    receiverPhone: string
+    status: string
+    destination: string
+    estimatedValue: number
+    createdAt: string
+    trackingNumber: string
+    priority: string
+    items: OrderItem[]
+    pickupAddress: string
+    destinationAddress: string
+    packageDetails: string
+    specialInstructions?: string
+  }) => void
 }
 
 export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: CreateOrderModalProps) {
@@ -169,14 +185,13 @@ export default function CreateOrderModal({ open, onOpenChange, onOrderCreate }: 
           customerName: response.data.senderName,
           receiverName: response.data.receiverName,
           receiverPhone: response.data.receiverPhone,
-          status: response.data.orderStatus === 'Pending' ? 'Processing' : response.data.orderStatus,
+          status: response.data.orderStatus,
           destination: response.data.destinationAddress.split(',')[0], // First part as destination
           estimatedValue: orderValue,
           createdAt: response.data.createdAt,
           trackingNumber: response.data.trackingNumber,
           priority: orderData.priority,
           items: orderData.items,
-          paymentStatus: 'unpaid',
           pickupAddress: response.data.pickupAddress,
           destinationAddress: response.data.destinationAddress,
           packageDetails: response.data.packageDetails,

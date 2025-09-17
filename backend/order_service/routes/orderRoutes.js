@@ -52,7 +52,7 @@ const validateStatusUpdate = (req, res, next) => {
     });
   }
   
-  const validStatuses = ['Pending', 'PickedUp', 'OnWarehouse', 'Delivered', 'Cancelled'];
+  const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered', 'Cancelled'];
   if (!validStatuses.includes(newStatus)) {
     return res.status(400).json({
       success: false,
@@ -198,7 +198,7 @@ router.get('/docs', (req, res) => {
           description: 'Update order status',
           parameters: {
             orderId: 'string (required) - Order ID',
-            newStatus: 'string (required) - New status (Pending, PickedUp, OnWarehouse, Delivered, Cancelled)',
+            newStatus: 'string (required) - New status (Pending, Selected_for_pickup, Pickedup_from_client, Inwarehouse, Pickedup_from_warehouse, Delivered, Cancelled)',
             statusChangedBy: 'string (required) - Who changed the status',
             changeReason: 'string (optional) - Reason for status change',
             location: 'string (optional) - Current location',
@@ -238,9 +238,11 @@ router.get('/docs', (req, res) => {
         }
       ],
       orderStatuses: [
-        'Pending - Order created but not yet picked up',
-        'PickedUp - Order has been picked up by driver',
-        'OnWarehouse - Order is at the warehouse/distribution center',
+        'Pending - Order created but not yet selected for pickup',
+        'Selected_for_pickup - Order selected by driver, ready for client pickup',
+        'Pickedup_from_client - Order picked up from client, transport to warehouse',
+        'Inwarehouse - Order stored in warehouse, ready for final delivery',
+        'Pickedup_from_warehouse - Order picked up from warehouse for final delivery',
         'Delivered - Order has been delivered to recipient',
         'Cancelled - Order has been cancelled'
       ],
