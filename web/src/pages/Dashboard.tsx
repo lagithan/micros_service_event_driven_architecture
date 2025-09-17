@@ -9,47 +9,161 @@ import {
   Bell, 
   Plus,
   User,
-  LogOut
+  LogOut,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react'
+import { OrderService, TokenManager } from '@/lib/api'
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const [selectedTab, setSelectedTab] = useState("orders")
   const [createOrderOpen, setCreateOrderOpen] = useState(false)
-  const [orders, setOrders] = useState([
-    {
-      id: "ORD-2024-001",
-      customerName: "TechStore Ltd",
-      status: "In Transit",
-      destination: "Colombo",
-      estimatedValue: 1250,
-      createdAt: "2024-01-15T10:30:00Z",
-      priority: "express",
-      items: [{ name: "Electronics", quantity: 2 }]
-    },
-    {
-      id: "ORD-2024-002", 
-      customerName: "Fashion Hub",
-      status: "Processing",
-      destination: "Kandy",
-      estimatedValue: 890,
-      createdAt: "2024-01-15T14:20:00Z",
-      priority: "standard",
-      items: [{ name: "Clothing", quantity: 5 }]
-    },
-    {
-      id: "ORD-2024-003",
-      customerName: "Digital World",
-      status: "Delivered",
-      destination: "Galle",
-      estimatedValue: 2100,
-      createdAt: "2024-01-14T09:15:00Z",
-      priority: "urgent",
-      items: [{ name: "Gadgets", quantity: 3 }]
+  const [orders, setOrders] = useState([])
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true)
+  const [orderError, setOrderError] = useState<string | null>(null)
+
+  // Load orders from API on component mount
+  useEffect(() => {
+    loadOrders()
+  }, [])
+
+  const loadOrders = async () => {
+    try {
+      setIsLoadingOrders(true)
+      setOrderError(null)
+      
+      const client = TokenManager.getClient()
+      if (!client?.id) {
+        console.warn('No client ID found, using mock data')
+        // Fall back to mock data if no client ID
+        setOrders([
+          {
+            id: "ORD-MOCK-001",
+            customerName: "Sample Customer",
+            status: "Processing",
+            destination: "Sample City",
+            estimatedValue: 200,
+            createdAt: new Date().toISOString(),
+            priority: "standard",
+            items: [{ name: "Sample Item", quantity: 1 }],
+            paymentStatus: "unpaid"
+          }
+        ])
+        setIsLoadingOrders(false)
+        return
+      }
+
+      console.log('Loading orders for client:', client.id)
+      const response = await OrderService.getClientOrders(Number(client.id))
+      
+      if (response.success && response.data?.orders) {
+        // Transform API orders to match frontend format
+        const transformedOrders = response.data.orders.map(order => ({
+          id: order.orderId || order.id,
+          customerName: order.senderName,
+          receiverName: order.receiverName,
+          receiverPhone: order.receiverPhone,
+          status: mapOrderStatus(order.orderStatus),
+          destination: extractDestination(order.destinationAddress),
+          estimatedValue: calculateEstimatedValue(order.packageDetails || ''),
+          createdAt: order.createdAt,
+          trackingNumber: order.trackingNumber,
+          priority: extractPriority(order.packageDetails || ''),
+          items: parseItems(order.packageDetails || ''),
+          paymentStatus: 'unpaid', // Default to unpaid for new orders
+          pickupAddress: order.pickupAddress,
+          destinationAddress: order.destinationAddress,
+          packageDetails: order.packageDetails,
+          specialInstructions: order.specialInstructions,
+          orderStatus: order.orderStatus
+        }))
+        
+        console.log('Transformed orders:', transformedOrders)
+        setOrders(transformedOrders)
+      } else {
+        console.warn('No orders found or invalid response:', response)
+        setOrders([])
+      }
+    } catch (error) {
+      console.error('Failed to load orders:', error)
+      setOrderError(error instanceof Error ? error.message : 'Failed to load orders')
+      
+      // Fall back to mock data on error
+      setOrders([
+        {
+          id: "ORD-ERROR-001",
+          customerName: "Unable to load orders",
+          status: "Processing",
+          destination: "Check connection",
+          estimatedValue: 0,
+          createdAt: new Date().toISOString(),
+          priority: "standard",
+          items: [],
+          paymentStatus: "unpaid"
+        }
+      ])
+    } finally {
+      setIsLoadingOrders(false)
     }
-  ])
+  }
+
+  // Helper functions to transform API data
+  const mapOrderStatus = (apiStatus: string) => {
+    switch (apiStatus) {
+      case 'Pending': return 'Processing'
+      case 'PickedUp': return 'In Transit'
+      case 'OnWarehouse': return 'In Transit'
+      case 'Delivered': return 'Delivered'
+      case 'Cancelled': return 'Cancelled'
+      default: return 'Processing'
+    }
+  }
+
+  const extractDestination = (fullAddress: string) => {
+    // Extract first part of address as destination
+    return fullAddress.split(',')[0].trim() || fullAddress
+  }
+
+  const calculateEstimatedValue = (packageDetails: string) => {
+    // Try to extract value from package details or calculate based on items
+    const basePrice = 150
+    const weightMatch = packageDetails.match(/(\d+\.?\d*)kg total/)
+    const itemMatch = packageDetails.match(/(\d+) items/)
+    const priorityMatch = packageDetails.match(/Priority: (\w+)/)
+    
+    const weight = weightMatch ? parseFloat(weightMatch[1]) : 1
+    const items = itemMatch ? parseInt(itemMatch[1]) : 1
+    const priority = priorityMatch ? priorityMatch[1] : 'standard'
+    
+    const priorityMultiplier = priority === 'urgent' ? 1.15 : priority === 'express' ? 1.05 : 1
+    const weightCharge = weight * 8
+    const itemHandlingCharge = items * 3
+    
+    return (basePrice * priorityMultiplier) + weightCharge + itemHandlingCharge
+  }
+
+  const extractPriority = (packageDetails: string) => {
+    const priorityMatch = packageDetails.match(/Priority: (\w+)/)
+    return priorityMatch ? priorityMatch[1] : 'standard'
+  }
+
+  const parseItems = (packageDetails: string) => {
+    // Parse items from package details
+    const itemMatch = packageDetails.match(/Categories: (.+?)\. Priority/)
+    if (itemMatch) {
+      const categories = itemMatch[1].split(', ')
+      return categories.map((cat, index) => ({
+        id: `item-${index}`,
+        name: cat.split(' ')[1] || cat, // Extract category name
+        quantity: parseInt(cat.split('x')[0]) || 1
+      }))
+    }
+    return []
+  }
 
   const handleCreateOrder = (newOrder: any) => {
+    // Add the new order to the beginning of the list
     setOrders(prev => [newOrder, ...prev])
   }
 
@@ -58,13 +172,17 @@ export default function Dashboard() {
     // TODO: Implement order detail modal
   }
 
+  const handleRefreshOrders = () => {
+    loadOrders()
+  }
+
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const notificationsRef = useRef<HTMLDivElement>(null)
 
   const notifications = [
-    { id: 1, message: "Order ORD-2024-004 has been shipped.", date: "2024-01-16" },
-    { id: 2, message: "Invoice INV-2024-001 is ready for download.", date: "2024-01-15" },
-    { id: 3, message: "Order ORD-2024-003 delivered successfully.", date: "2024-01-14" }
+    { id: 1, message: "New order created successfully.", date: new Date().toLocaleDateString() },
+    { id: 2, message: "Order status updated to Processing.", date: new Date().toLocaleDateString() },
+    { id: 3, message: "Welcome to SwiftTrack dashboard!", date: new Date().toLocaleDateString() }
   ]
 
   // Close dropdown on outside click
@@ -92,6 +210,7 @@ export default function Dashboard() {
   }
 
   const handleLogout = () => {
+    TokenManager.removeToken()
     navigate('/')
   }
 
@@ -110,6 +229,17 @@ export default function Dashboard() {
 
           {/* Actions */}
           <div className="flex items-center space-x-4 relative">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefreshOrders}
+              disabled={isLoadingOrders}
+              title="Refresh orders"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isLoadingOrders ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            
             <div ref={notificationsRef} className="relative">
               <Button
                 variant="ghost"
@@ -163,20 +293,38 @@ export default function Dashboard() {
         <main className="p-6">
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-bold text-foreground">Order Management</h1>
+              <div>
+                <h1 className="text-3xl font-bold text-foreground">Order Management</h1>
+                {orderError && (
+                  <div className="flex items-center gap-2 text-destructive text-sm mt-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {orderError}
+                  </div>
+                )}
+              </div>
               <Button 
                 variant="gradient"
                 onClick={() => setCreateOrderOpen(true)}
+                disabled={isLoadingOrders}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 New Order
               </Button>
             </div>
 
-            <OrdersTable 
-              orders={orders}
-              onOrderView={handleOrderView}
-            />
+            {isLoadingOrders ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-muted-foreground">Loading your orders...</p>
+                </div>
+              </div>
+            ) : (
+              <OrdersTable 
+                orders={orders}
+                onOrderView={handleOrderView}
+              />
+            )}
           </div>
         </main>
       </div>
