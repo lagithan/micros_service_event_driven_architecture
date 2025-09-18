@@ -63,7 +63,7 @@ export interface DeliveryOrder {
   customerPhone?: string;
   deliveryAddress?: string;
   pickupAddress?: string;
-  deliveryStatus: 'Picking' | 'PickedUp' | 'Delivering' | 'Delivered';
+  deliveryStatus: 'Pending' | 'Selected_for_pickup' | 'Pickedup_from_client' | 'Inwarehouse' | 'Pickedup_from_warehouse' | 'Delivered';
   pickedupDate?: string;
   deliveredDate?: string;
   items?: { name: string; quantity: number }[];
@@ -71,6 +71,7 @@ export interface DeliveryOrder {
   estimatedDeliveryTime?: string;
   createdAt?: string;
   updatedAt?: string;
+  cashPaid?: boolean;
 }
 
 export interface DeliveryResponse {
@@ -365,7 +366,7 @@ export class DeliveryService {
 
     try {
       const response = await HttpClient.get<DeliveryResponse>(
-        `${API_CONFIG.BASE_URL}${this.BASE_PATH}/person/${driver.id}`
+        `${API_CONFIG.BASE_URL}${this.BASE_PATH}/my/${driver.id}`
       );
       return response;
     } catch (error) {
@@ -396,11 +397,59 @@ export class DeliveryService {
   }
 
   /**
+   * Get available orders for pickup
+   */
+  static async getAvailableOrders(): Promise<DeliveryResponse> {
+    try {
+      const response = await HttpClient.get<DeliveryResponse>(
+        `${API_CONFIG.BASE_URL}${this.BASE_PATH}/available-orders`
+      );
+      return response;
+    } catch (error) {
+      console.error('Get available orders error:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to fetch available orders'
+      };
+    }
+  }
+
+  /**
+   * Assign order to current driver
+   */
+  static async assignOrder(orderId: string): Promise<DeliveryResponse> {
+    const driver = TokenManager.getDriver();
+    if (!driver?.id) {
+      return {
+        success: false,
+        message: 'Driver not authenticated'
+      };
+    }
+
+    try {
+      const response = await HttpClient.post<DeliveryResponse>(
+        `${API_CONFIG.BASE_URL}${this.BASE_PATH}/assign/${orderId}`,
+        {
+          deliveryPersonId: driver.id,
+          deliveryPersonName: driver.fullName
+        }
+      );
+      return response;
+    } catch (error) {
+      console.error('Assign order error:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to assign order'
+      };
+    }
+  }
+
+  /**
    * Update delivery status
    */
   static async updateStatus(
     orderId: string,
-    newStatus: 'Picking' | 'PickedUp' | 'Delivering' | 'Delivered',
+    newStatus: 'Pending' | 'Selected_for_pickup' | 'Pickedup_from_client' | 'Inwarehouse' | 'Pickedup_from_warehouse' | 'Delivered',
     notes?: string
   ): Promise<DeliveryResponse> {
     const driver = TokenManager.getDriver();
@@ -413,10 +462,10 @@ export class DeliveryService {
 
     try {
       const response = await HttpClient.patch<DeliveryResponse>(
-        `${API_CONFIG.BASE_URL}${this.BASE_PATH}/${orderId}/status`,
+        `${API_CONFIG.BASE_URL}${this.BASE_PATH}/status/${orderId}`,
         {
-          newStatus,
-          statusChangedBy: driver.fullName,
+          status: newStatus,
+          deliveryPersonId: driver.id,
           notes
         }
       );
@@ -426,6 +475,36 @@ export class DeliveryService {
       return {
         success: false,
         message: error instanceof Error ? error.message : 'Failed to update status'
+      };
+    }
+  }
+
+  /**
+   * Update cash payment status for an order
+   */
+  static async updateCashPaymentStatus(orderId: string, isPaid: boolean): Promise<DeliveryResponse> {
+    const driver = TokenManager.getDriver();
+    if (!driver) {
+      return {
+        success: false,
+        message: 'Driver not authenticated'
+      };
+    }
+
+    try {
+      const response = await HttpClient.patch<DeliveryResponse>(
+        `${API_CONFIG.BASE_URL}${this.BASE_PATH}/payment/${orderId}`,
+        {
+          cashPaid: isPaid,
+          paymentUpdatedBy: driver.fullName
+        }
+      );
+      return response;
+    } catch (error) {
+      console.error('Update payment status error:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to update payment status'
       };
     }
   }

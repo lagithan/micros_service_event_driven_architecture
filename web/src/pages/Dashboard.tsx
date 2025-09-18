@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import CreateOrderModal from '@/components/orders/CreateOrderModal'
@@ -15,6 +15,26 @@ import {
 } from 'lucide-react'
 import { OrderService, TokenManager } from '@/lib/api'
 
+interface OrderData {
+  id: string;
+  customerName: string;
+  receiverName?: string;
+  receiverPhone?: string;
+  status: string;
+  destination: string;
+  estimatedValue: number;
+  createdAt: string;
+  trackingNumber?: string;
+  priority?: string;
+  items?: Array<{ id?: string; name: string; quantity: number }>;
+  paymentStatus?: "Paid" | "Pending";
+  pickupAddress?: string;
+  destinationAddress?: string;
+  packageDetails?: string;
+  specialInstructions?: string;
+  orderStatus?: string;
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [selectedTab, setSelectedTab] = useState("orders")
@@ -24,11 +44,8 @@ export default function Dashboard() {
   const [orderError, setOrderError] = useState<string | null>(null)
 
   // Load orders from API on component mount
-  useEffect(() => {
-    loadOrders()
-  }, [])
-
-  const loadOrders = async () => {
+  // Load orders from API on component mount
+  const loadOrders = useCallback(async () => {
     try {
       setIsLoadingOrders(true)
       setOrderError(null)
@@ -47,7 +64,7 @@ export default function Dashboard() {
             createdAt: new Date().toISOString(),
             priority: "standard",
             items: [{ name: "Sample Item", quantity: 1 }],
-            paymentStatus: "unpaid"
+            paymentStatus: "Pending"
           }
         ])
         setIsLoadingOrders(false)
@@ -55,23 +72,26 @@ export default function Dashboard() {
       }
 
       console.log('Loading orders for client:', client.id)
+      console.log('Client data:', client)
       const response = await OrderService.getClientOrders(Number(client.id))
+      console.log('Raw API response:', response)
       
       if (response.success && response.data?.orders) {
+        console.log('Orders from API:', response.data.orders)
         // Transform API orders to match frontend format
         const transformedOrders = response.data.orders.map(order => ({
           id: order.orderId || order.id,
           customerName: order.senderName,
           receiverName: order.receiverName,
           receiverPhone: order.receiverPhone,
-          status: mapOrderStatus(order.orderStatus),
+          status: order.orderStatus, // Use original status from database
           destination: extractDestination(order.destinationAddress),
           estimatedValue: calculateEstimatedValue(order.packageDetails || ''),
           createdAt: order.createdAt,
           trackingNumber: order.trackingNumber,
           priority: extractPriority(order.packageDetails || ''),
           items: parseItems(order.packageDetails || ''),
-          paymentStatus: 'unpaid', // Default to unpaid for new orders
+          paymentStatus: order.paymentStatus || 'Pending', // Use paymentStatus from API
           pickupAddress: order.pickupAddress,
           destinationAddress: order.destinationAddress,
           packageDetails: order.packageDetails,
@@ -100,13 +120,17 @@ export default function Dashboard() {
           createdAt: new Date().toISOString(),
           priority: "standard",
           items: [],
-          paymentStatus: "unpaid"
+          paymentStatus: "Pending"
         }
       ])
     } finally {
       setIsLoadingOrders(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadOrders()
+  }, [loadOrders])
 
   // Helper functions to transform API data
   const mapOrderStatus = (apiStatus: string) => {
@@ -162,12 +186,19 @@ export default function Dashboard() {
     return []
   }
 
-  const handleCreateOrder = (newOrder: any) => {
-    // Add the new order to the beginning of the list
+  const handleCreateOrder = async (newOrder: OrderData) => {
+    // Add the new order to the beginning of the list for immediate feedback
     setOrders(prev => [newOrder, ...prev])
+    
+    // Refresh the entire list from backend to ensure consistency
+    try {
+      await loadOrders()
+    } catch (error) {
+      console.warn('Failed to refresh orders after creation:', error)
+    }
   }
 
-  const handleOrderView = (order: any) => {
+  const handleOrderView = (order: OrderData) => {
     console.log('View order:', order)
     // TODO: Implement order detail modal
   }

@@ -1,5 +1,5 @@
 const express = require('express');
-const DeliveryController = require('../controllers/deliveryController');
+const DeliveryController = require('../controllers/DeliveryController');
 
 const router = express.Router();
 
@@ -14,7 +14,7 @@ const validateDeliveryCreation = (req, res, next) => {
     });
   }
 
-  const validStatuses = ['Picking', 'PickedUp', 'Delivering', 'Delivered'];
+  const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'];
   if (!validStatuses.includes(deliveryStatus)) {
     return res.status(400).json({
       success: false,
@@ -35,7 +35,7 @@ const validateStatusUpdate = (req, res, next) => {
     });
   }
 
-  const validStatuses = ['Picking', 'PickedUp', 'Delivering', 'Delivered'];
+  const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'];
   if (!validStatuses.includes(newStatus)) {
     return res.status(400).json({
       success: false,
@@ -49,7 +49,7 @@ const validateStatusUpdate = (req, res, next) => {
 const validateOrderId = (req, res, next) => {
   const { orderId } = req.params;
 
-  if (!orderId || orderId.length < 3) {
+  if (!orderId || orderId.trim() === '') {
     return res.status(400).json({
       success: false,
       message: 'Valid orderId is required'
@@ -68,7 +68,7 @@ router.post('/', validateDeliveryCreation, DeliveryController.createDelivery);
 router.get('/order/:orderId', validateOrderId, DeliveryController.getDelivery);
 
 // Update delivery status
-router.patch('/:orderId/status', validateOrderId, validateStatusUpdate, DeliveryController.updateDeliveryStatus);
+router.patch('/status/:orderId', validateOrderId, DeliveryController.updateDeliveryStatus);
 
 // Cancel delivery
 router.patch('/:orderId/cancel', validateOrderId, DeliveryController.cancelDelivery);
@@ -78,6 +78,18 @@ router.get('/person/:deliveryPersonId', DeliveryController.getDeliveriesForPerso
 
 // Get delivery statistics
 router.get('/statistics', DeliveryController.getDeliveryStatistics);
+
+// Get available orders for pickup
+router.get('/available-orders', DeliveryController.getAvailableOrders);
+
+// Assign order to delivery person
+router.post('/assign/:orderId', validateOrderId, DeliveryController.assignOrderToDriver);
+
+// Get my deliveries for a delivery person
+router.get('/my/:deliveryPersonId', DeliveryController.getMyDeliveries);
+
+// Update cash payment status
+router.patch('/payment/:orderId', validateOrderId, DeliveryController.updateCashPaymentStatus);
 
 // Health check for delivery routes
 router.get('/health', (req, res) => {
@@ -89,10 +101,14 @@ router.get('/health', (req, res) => {
       available: [
         'POST /api/deliveries',
         'GET /api/deliveries/order/:orderId',
-        'PATCH /api/deliveries/:orderId/status',
+        'PATCH /api/deliveries/status/:orderId',
         'PATCH /api/deliveries/:orderId/cancel',
         'GET /api/deliveries/person/:deliveryPersonId',
-        'GET /api/deliveries/statistics'
+        'GET /api/deliveries/statistics',
+        'GET /api/deliveries/available-orders',
+        'POST /api/deliveries/assign/:orderId',
+        'GET /api/deliveries/my/:deliveryPersonId',
+        'PATCH /api/deliveries/payment/:orderId'
       ]
     },
     timestamp: new Date().toISOString()
@@ -118,7 +134,7 @@ router.get('/docs', (req, res) => {
             orderId: 'string (required) - Order ID',
             pickedupDate: 'datetime (optional) - Picked up date',
             deliveredDate: 'datetime (optional) - Delivered date',
-            deliveryStatus: 'string (required) - Delivery status (Picking, PickedUp, Delivering, Delivered)'
+            deliveryStatus: 'string (required) - Delivery status (Pending, Selected_for_pickup, Pickedup_from_client, Inwarehouse, Pickedup_from_warehouse, Delivered)'
           }
         },
         {
@@ -135,7 +151,7 @@ router.get('/docs', (req, res) => {
           description: 'Update delivery status',
           parameters: {
             orderId: 'string (required) - Order ID',
-            newStatus: 'string (required) - New status (Picking, PickedUp, Delivering, Delivered)',
+            newStatus: 'string (required) - New status (Pending, Selected_for_pickup, Pickedup_from_client, Inwarehouse, Pickedup_from_warehouse, Delivered)',
             statusChangedBy: 'string (required) - Who changed the status',
             changeReason: 'string (optional) - Reason for status change',
             location: 'string (optional) - Current location'
@@ -172,10 +188,12 @@ router.get('/docs', (req, res) => {
         }
       ],
       deliveryStatuses: [
-        'Picking - Delivery person is picking up the order',
-        'PickedUp - Order has been picked up',
-        'Delivering - Order is being delivered',
-        'Delivered - Order has been delivered'
+        'Pending - Order is waiting to be assigned',
+        'Selected_for_pickup - Order selected by driver, ready for client pickup',
+        'Pickedup_from_client - Order picked up from client, transport to warehouse',
+        'Inwarehouse - Order stored in warehouse, ready for final delivery',
+        'Pickedup_from_warehouse - Order picked up from warehouse for final delivery',
+        'Delivered - Order has been delivered to customer'
       ],
       responseFormat: {
         success: 'boolean - Whether the request was successful',

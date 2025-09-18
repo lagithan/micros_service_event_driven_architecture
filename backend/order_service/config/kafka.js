@@ -19,6 +19,7 @@ const consumer = kafka.consumer({
 
 const TOPIC_ORDERS = 'order-events';
 const TOPIC_ORDER_STATUS = 'order-status-events';
+const TOPIC_WAREHOUSE_NOTIFICATIONS = 'warehouse-notifications';
 
 // Initialize Kafka
 const initKafka = async () => {
@@ -29,13 +30,13 @@ const initKafka = async () => {
     await consumer.connect();
     console.log('Kafka consumer connected');
     
-    // Subscribe to order status updates
+    // Subscribe to order status updates and warehouse notifications
     await consumer.subscribe({
-      topics: [TOPIC_ORDER_STATUS],
+      topics: [TOPIC_ORDER_STATUS, TOPIC_WAREHOUSE_NOTIFICATIONS],
       fromBeginning: false
     });
     
-    console.log(`Subscribed to topics: ${TOPIC_ORDER_STATUS}`);
+    console.log(`Subscribed to topics: ${TOPIC_ORDER_STATUS}, ${TOPIC_WAREHOUSE_NOTIFICATIONS}`);
   } catch (error) {
     console.error('Failed to connect to Kafka:', error);
     throw error;
@@ -43,7 +44,7 @@ const initKafka = async () => {
 };
 
 // Start consuming messages
-const startKafkaConsumer = async (handleOrderStatusUpdate) => {
+const startKafkaConsumer = async (handleOrderStatusUpdate, handleWarehouseNotification) => {
   try {
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
@@ -51,7 +52,7 @@ const startKafkaConsumer = async (handleOrderStatusUpdate) => {
           const messageValue = message.value.toString();
           const event = JSON.parse(messageValue);
           
-          console.log('Received order status update:', {
+          console.log('Received Kafka message:', {
             topic,
             partition,
             offset: message.offset,
@@ -61,6 +62,12 @@ const startKafkaConsumer = async (handleOrderStatusUpdate) => {
 
           if (topic === TOPIC_ORDER_STATUS && event.eventType === 'ORDER_STATUS_UPDATED') {
             await handleOrderStatusUpdate(event);
+          }
+          else if (topic === TOPIC_WAREHOUSE_NOTIFICATIONS) {
+            console.log('📦 Processing warehouse notification:', event.eventType);
+            if (handleWarehouseNotification) {
+              await handleWarehouseNotification(event);
+            }
           }
           
         } catch (error) {

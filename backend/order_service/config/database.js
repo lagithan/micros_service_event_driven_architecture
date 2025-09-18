@@ -28,7 +28,7 @@ const connectDatabase = async () => {
         receiver_phone VARCHAR(20) NOT NULL,
         pickup_address TEXT NOT NULL,
         destination_address TEXT NOT NULL,
-        order_status VARCHAR(20) NOT NULL DEFAULT 'Pending' CHECK (order_status IN ('Pending', 'PickedUp', 'OnWarehouse', 'Delivered', 'Cancelled')),
+        order_status VARCHAR(50) NOT NULL DEFAULT 'Pending' CHECK (order_status IN ('Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered', 'Cancelled')),
         user_id INTEGER,
         client_id INTEGER,
         driver_id INTEGER,
@@ -38,6 +38,7 @@ const connectDatabase = async () => {
         actual_pickup_date TIMESTAMP,
         actual_delivery_date TIMESTAMP,
         tracking_number VARCHAR(100) UNIQUE,
+        cash_paid BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -48,8 +49,8 @@ const connectDatabase = async () => {
       CREATE TABLE IF NOT EXISTS order_status_history (
         id SERIAL PRIMARY KEY,
         order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
-        previous_status VARCHAR(20),
-        new_status VARCHAR(20) NOT NULL,
+        previous_status VARCHAR(50),
+        new_status VARCHAR(50) NOT NULL,
         status_changed_by VARCHAR(100),
         change_reason TEXT,
         location TEXT,

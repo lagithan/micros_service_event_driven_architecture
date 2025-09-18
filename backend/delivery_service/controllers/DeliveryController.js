@@ -36,7 +36,7 @@ class DeliveryController {
         });
       }
 
-      const validStatuses = ['Picking', 'PickedUp', 'Delivering', 'Delivered'];
+      const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'];
       if (!validStatuses.includes(deliveryStatus)) {
         return res.status(400).json({
           success: false,
@@ -150,7 +150,7 @@ class DeliveryController {
             order_id: orderId,
             pickedup_date: null,
             delivered_date: null,
-            delivery_status: 'Picking',
+            delivery_status: 'Pending',
             created_at: new Date().toISOString()
           };
         } else {
@@ -196,7 +196,7 @@ class DeliveryController {
         });
       }
 
-      const validStatuses = ['Picking', 'PickedUp', 'Delivering', 'Delivered'];
+      const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'];
       if (!validStatuses.includes(newStatus)) {
         return res.status(400).json({
           success: false,
@@ -215,12 +215,11 @@ class DeliveryController {
           });
         }
 
-        updatedDelivery = await DeliveryModel.updateDeliveryStatus(
+        updatedDelivery = await DeliveryModel.updateDeliveryStatusWithDates(
           orderId,
           newStatus,
           statusChangedBy,
-          changeReason,
-          location
+          changeReason
         );
 
         // Publish delivery status updated event to Kafka
@@ -403,7 +402,7 @@ class DeliveryController {
               order_id: 'ORD123456',
               delivery_person_id: deliveryPersonId,
               delivery_person_name: 'Mock Delivery Person',
-              delivery_status: 'Picking',
+              delivery_status: 'Pending',
               created_at: new Date().toISOString()
             }
           ];
@@ -459,9 +458,11 @@ class DeliveryController {
           console.log('ℹ️  Database unavailable - returning mock statistics');
           statistics = {
             total_deliveries: '10',
-            picking_deliveries: '3',
-            pickedup_deliveries: '2',
-            delivering_deliveries: '3',
+            pending_deliveries: '3',
+            selected_for_pickup_deliveries: '2',
+            pickedup_from_client_deliveries: '1',
+            inwarehouse_deliveries: '1',
+            pickedup_from_warehouse_deliveries: '1',
             delivered_deliveries: '2',
             cancelled_deliveries: '0',
             avg_delivery_time_hours: '12.5'
@@ -475,9 +476,11 @@ class DeliveryController {
         success: true,
         data: {
           totalDeliveries: parseInt(statistics.total_deliveries),
-          pickingDeliveries: parseInt(statistics.picking_deliveries),
-          pickedUpDeliveries: parseInt(statistics.pickedup_deliveries),
-          deliveringDeliveries: parseInt(statistics.delivering_deliveries),
+          pendingDeliveries: parseInt(statistics.pending_deliveries),
+          selectedForPickupDeliveries: parseInt(statistics.selected_for_pickup_deliveries),
+          pickedupFromClientDeliveries: parseInt(statistics.pickedup_from_client_deliveries),
+          inwarehouseDeliveries: parseInt(statistics.inwarehouse_deliveries),
+          pickedupFromWarehouseDeliveries: parseInt(statistics.pickedup_from_warehouse_deliveries),
           deliveredDeliveries: parseInt(statistics.delivered_deliveries),
           cancelledDeliveries: parseInt(statistics.cancelled_deliveries),
           averageDeliveryTimeHours: parseFloat(statistics.avg_delivery_time_hours) || 0
@@ -490,6 +493,355 @@ class DeliveryController {
         success: false,
         message: 'Internal server error',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  // Get available orders for pickup
+  static async getAvailableOrders(req, res) {
+    try {
+      let availableOrders = [];
+
+      try {
+        // Fetch orders that are not yet assigned to delivery persons
+        availableOrders = await DeliveryModel.getAvailableOrders();
+
+        if (!availableOrders || availableOrders.length === 0) {
+          return res.status(200).json({
+            success: true,
+            message: 'No available orders for pickup at the moment',
+            data: []
+          });
+        }
+
+      } catch (dbError) {
+        console.error('Database error during available orders fetch:', dbError.message);
+
+        if (dbError.message.includes('connect') || dbError.code === 'ECONNREFUSED') {
+          console.log('ℹ️  Database unavailable - returning mock available orders');
+          availableOrders = [
+            {
+              id: 1,
+              order_id: 'ORDER001',
+              sender_name: 'John Smith',
+              receiver_name: 'Alice Johnson',
+              receiver_phone: '+1234567890',
+              pickup_address: '123 Main Street, Downtown, City',
+              destination_address: '456 Oak Avenue, Suburbs, City',
+              order_status: 'Pending',
+              package_details: 'Electronics package - Handle with care',
+              special_instructions: 'Call before delivery',
+              estimated_delivery_date: new Date(),
+              created_at: new Date(),
+              user_id: 1,
+              client_id: 2,
+              driver_id: null
+            },
+            {
+              id: 2,
+              order_id: 'ORDER002',
+              sender_name: 'Sarah Wilson',
+              receiver_name: 'Mike Davis',
+              receiver_phone: '+1987654321',
+              pickup_address: '789 Pine Road, Business District, City',
+              destination_address: '321 Elm Street, Residential Area, City',
+              order_status: 'Pending',
+              package_details: 'Documents and small items',
+              special_instructions: 'Deliver to front desk',
+              estimated_delivery_date: new Date(),
+              created_at: new Date(),
+              user_id: 2,
+              client_id: 3,
+              driver_id: null
+            }
+          ];
+        } else {
+          throw dbError;
+        }
+      }
+
+      // Transform the data to match frontend expectations
+      const transformedOrders = availableOrders.map(order => ({
+        id: order.order_id,
+        orderId: order.order_id,
+        customerName: order.sender_name,
+        receiverName: order.receiver_name,
+        receiverPhone: order.receiver_phone,
+        pickupAddress: order.pickup_address,
+        deliveryAddress: order.destination_address,
+        packageDetails: order.package_details,
+        specialInstructions: order.special_instructions,
+        estimatedDeliveryDate: order.estimated_delivery_date,
+        status: 'select', // Available for pickup
+        createdAt: order.created_at
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: transformedOrders
+      });
+
+    } catch (error) {
+      console.error('Get available orders error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  // Assign order to delivery person
+  static async assignOrderToDriver(req, res) {
+    try {
+      const { orderId } = req.params;
+      const { deliveryPersonId, deliveryPersonName } = req.body;
+
+      console.log('🔄 Assignment request received:', {
+        orderId,
+        deliveryPersonId,
+        deliveryPersonName
+      });
+
+      // Validation
+      if (!deliveryPersonId || !deliveryPersonName) {
+        return res.status(400).json({
+          success: false,
+          message: 'deliveryPersonId and deliveryPersonName are required'
+        });
+      }
+
+      // First check if order exists and is available
+      let orderDetails = null;
+      try {
+        orderDetails = await DeliveryModel.getOrderWithDeliveryDetails(orderId);
+        console.log('📋 Order details found:', orderDetails);
+        
+        if (!orderDetails) {
+          return res.status(404).json({
+            success: false,
+            message: 'Order not found'
+          });
+        }
+
+        if (orderDetails.delivery_person_id) {
+          return res.status(400).json({
+            success: false,
+            message: 'Order is already assigned to another delivery person'
+          });
+        }
+
+      } catch (dbError) {
+        console.error('❌ Database error checking order availability:', dbError);
+        return res.status(500).json({
+          success: false,
+          message: 'Unable to check order availability',
+          debug: dbError.message
+        });
+      }
+
+      // Create delivery record
+      try {
+        console.log('🔄 Attempting to assign order to delivery person...');
+        const assignmentResult = await DeliveryModel.assignOrderToDeliveryPerson(
+          orderId,
+          deliveryPersonId,
+          deliveryPersonName
+        );
+
+        console.log('✅ Order assigned successfully:', assignmentResult);
+
+        // Publish event if Kafka is available
+        try {
+          await publishDeliveryCreatedEvent({
+            deliveryId: assignmentResult.deliveryRecord.id,
+            orderId,
+            deliveryPersonId,
+            deliveryPersonName,
+            status: 'Selected_for_pickup',
+            timestamp: new Date().toISOString()
+          });
+        } catch (eventError) {
+          console.warn('⚠️  Failed to publish delivery created event:', eventError.message);
+        }
+
+        res.status(201).json({
+          success: true,
+          message: 'Order successfully assigned for pickup',
+          data: {
+            deliveryId: assignmentResult.deliveryRecord.id,
+            orderId: assignmentResult.deliveryRecord.order_id,
+            deliveryPersonId: assignmentResult.deliveryRecord.delivery_person_id,
+            deliveryPersonName: assignmentResult.deliveryRecord.delivery_person_name,
+            deliveryStatus: assignmentResult.deliveryRecord.delivery_status,
+            assignedAt: assignmentResult.deliveryRecord.created_at,
+            orderUpdate: {
+              order_id: assignmentResult.orderUpdate.order_id,
+              order_status: assignmentResult.orderUpdate.order_status,
+              driver_id: assignmentResult.orderUpdate.driver_id,
+              actual_pickup_date: assignmentResult.orderUpdate.actual_pickup_date
+            }
+          }
+        });
+
+      } catch (dbError) {
+        console.error('❌ Database error during order assignment:', dbError);
+        res.status(500).json({
+          success: false,
+          message: 'Failed to assign order to delivery person',
+          debug: dbError.message
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ Assign order to driver error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        debug: error.message
+      });
+    }
+  }
+
+  // Update delivery status (New 6-stage workflow)
+  static async updateDeliveryStatus(req, res) {
+    const { orderId } = req.params;
+    const { status, deliveryPersonId } = req.body;
+
+    try {
+      console.log('🔄 Status update request received:', {
+        orderId,
+        status,
+        deliveryPersonId
+      });
+
+      // Validate status - updated to new 6-stage workflow
+      const validStatuses = ['Pending', 'Selected_for_pickup', 'Pickedup_from_client', 'Inwarehouse', 'Pickedup_from_warehouse', 'Delivered'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+        });
+      }
+
+      // Update status
+      console.log('🔍 About to call DeliveryModel.updateOrderDeliveryStatus with:', {
+        orderId,
+        status,
+        deliveryPersonId
+      });
+      
+      const result = await DeliveryModel.updateOrderDeliveryStatus(orderId, status, deliveryPersonId);
+
+      console.log('✅ Status updated successfully:', result);
+
+      // Publish delivery status updated event to Kafka
+      try {
+        console.log('📤 Publishing delivery status update to Kafka...');
+        await publishDeliveryStatusUpdatedEvent({
+          orderId: result.orderRecord.order_id,
+          previousStatus: 'previous-status', // We don't have previous status in this method, could be improved
+          newStatus: status,
+          statusChangedBy: `delivery-person-${deliveryPersonId}`,
+          changeReason: `Status updated via mobile app to ${status}`,
+          location: result.orderRecord.destination_address || 'Unknown',
+          deliveryPersonId: deliveryPersonId
+        });
+        console.log('✅ Kafka event published successfully for order:', orderId);
+      } catch (kafkaError) {
+        console.warn('⚠️  Failed to publish delivery status updated event to Kafka:', kafkaError.message);
+      }
+
+      res.json({
+        success: true,
+        message: `Order status updated to ${status}`,
+        data: {
+          orderId,
+          newStatus: status,
+          deliveryRecord: result.deliveryRecord,
+          orderRecord: result.orderRecord,
+          updatedAt: new Date().toISOString()
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Update delivery status error:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        orderId,
+        status,
+        deliveryPersonId
+      });
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update delivery status',
+        debug: error.message
+      });
+    }
+  }
+
+  // Get my deliveries for a specific delivery person
+  static async getMyDeliveries(req, res) {
+    try {
+      const { deliveryPersonId } = req.params;
+
+      console.log('📋 Get my deliveries request for:', deliveryPersonId);
+
+      const deliveries = await DeliveryModel.getMyDeliveries(deliveryPersonId);
+
+      console.log(`✅ Found ${deliveries.length} deliveries for delivery person ${deliveryPersonId}`);
+
+      res.json({
+        success: true,
+        message: 'Deliveries retrieved successfully',
+        data: deliveries
+      });
+
+    } catch (error) {
+      console.error('❌ Get my deliveries error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve deliveries',
+        debug: error.message
+      });
+    }
+  }
+
+  // Update cash payment status
+  static async updateCashPaymentStatus(req, res) {
+    try {
+      const { orderId } = req.params;
+      const { cashPaid, deliveryPersonId } = req.body;
+
+      console.log('💰 Cash payment update request:', {
+        orderId,
+        cashPaid,
+        deliveryPersonId
+      });
+
+      // Update cash payment status in orders table
+      const result = await DeliveryModel.updateCashPaymentStatus(orderId, cashPaid);
+
+      console.log('✅ Cash payment status updated successfully:', result);
+
+      res.json({
+        success: true,
+        message: cashPaid ? 'Order marked as paid' : 'Order marked as unpaid',
+        data: {
+          orderId,
+          cashPaid,
+          updatedAt: new Date().toISOString(),
+          orderRecord: result
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Update cash payment error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update cash payment status',
+        debug: error.message
       });
     }
   }

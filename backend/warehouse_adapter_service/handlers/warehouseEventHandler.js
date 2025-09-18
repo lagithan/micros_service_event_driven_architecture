@@ -1,4 +1,5 @@
 const { TCPMessageFormatter, TCPConnectionManager, OrderServiceClient } = require('../config/warehouseConfig');
+const { notifyOrderReachedWarehouse } = require('../config/kafkaProducer');
 
 class WarehouseEventHandler {
   constructor() {
@@ -177,8 +178,27 @@ class WarehouseEventHandler {
       console.log(`🏭 Handling warehouse status update: ${newStatus} for order ${orderId}`);
       
       // Simulate WMS acknowledgment and processing
-      if (newStatus === 'OnWarehouse') {
+      if (newStatus === 'Inwarehouse') {
         console.log('📦 Order arrived at warehouse - simulating WMS processing...');
+        
+        // Send Kafka notification to order service immediately
+        console.log('📨 Sending Kafka notification: Order reached at warehouse');
+        try {
+          const kafkaResult = await notifyOrderReachedWarehouse(orderId, {
+            orderNumber: orderNumber,
+            warehouseLocation: 'Main Warehouse',
+            receivedBy: 'Warehouse Staff',
+            trackingNumber: eventData.trackingNumber
+          });
+          
+          if (kafkaResult.success) {
+            console.log('✅ Kafka notification sent successfully to order service');
+          } else {
+            console.error('❌ Failed to send Kafka notification:', kafkaResult.error);
+          }
+        } catch (kafkaError) {
+          console.error('❌ Error sending Kafka notification:', kafkaError);
+        }
         
         // Simulate WMS processing delay
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -188,13 +208,13 @@ class WarehouseEventHandler {
         
         try {
           await this.orderServiceClient.updateOrderStatus(orderNumber, {
-            newStatus: 'OnWarehouse',
+            newStatus: 'Inwarehouse',
             statusChangedBy: 'warehouse-adapter',
             changeReason: 'Confirmed arrival at warehouse by WMS',
             location: 'Main Warehouse'
           });
           
-          console.log(`✅ Order ${orderId} status confirmed as OnWarehouse in Order Service`);
+          console.log(`✅ Order ${orderId} status confirmed as Inwarehouse in Order Service`);
           
         } catch (apiError) {
           console.error(`❌ Failed to update Order Service for order ${orderId}:`, apiError.message);
@@ -205,8 +225,8 @@ class WarehouseEventHandler {
       }
       
       // Handle other warehouse statuses
-      else if (newStatus === 'PickedUp') {
-        console.log('🚚 Order picked up by driver - notifying WMS...');
+      else if (newStatus === 'Pickedup_from_warehouse') {
+        console.log('🚚 Order picked up by driver from warehouse - notifying WMS...');
         
         // Send warehouse assignment message
         const warehouseMessage = TCPMessageFormatter.formatWarehouseAssignment({
@@ -227,7 +247,7 @@ class WarehouseEventHandler {
 
   // Check if status is warehouse-related
   isWarehouseStatus(status) {
-    const warehouseStatuses = ['OnWarehouse', 'PickedUp'];
+    const warehouseStatuses = ['Inwarehouse', 'Pickedup_from_warehouse'];
     return warehouseStatuses.includes(status);
   }
 
