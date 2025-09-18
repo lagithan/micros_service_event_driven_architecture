@@ -1,0 +1,15 @@
+{
+  "name": "client_management_adapter_service",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.2",
+    "kafkajs": "^2.2.4",
+    "soap": "^0.44.0",
+    "xml2js": "^0.4.23"
+  }
+}
