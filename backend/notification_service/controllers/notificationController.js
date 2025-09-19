@@ -5,7 +5,7 @@ class NotificationController {
   // Send manual notification (for testing purposes)
   static async sendManualNotification(req, res) {
     try {
-      const { to, subject, message, type = 'manual', firstName = 'User', lastName = '' } = req.body;
+    const { to, subject, message, type = 'manual', username = '' } = req.body;
 
       // Validation
       if (!to || !subject || !message) {
@@ -34,7 +34,7 @@ class NotificationController {
             </div>
             
             <div style="padding: 30px; background-color: #f9f9f9;">
-              <h2 style="color: #333;">Hello ${firstName} ${lastName}!</h2>
+              <h2 style="color: #333;">Hello ${username || 'User'}!</h2>
               
               <div style="background-color: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <div style="color: #666; line-height: 1.6; font-size: 16px;">
@@ -54,7 +54,7 @@ class NotificationController {
         text: `
           ${subject}
           
-          Hello ${firstName} ${lastName}!
+          Hello ${username || 'User'}!
           
           ${message}
           
@@ -105,29 +105,13 @@ class NotificationController {
   // Send welcome email (can be called directly)
   static async sendWelcome(req, res) {
     try {
-      const { email, firstName, lastName } = req.body;
+      const { email, username } = req.body;
 
-      // Validation
-      if (!email || !firstName || !lastName) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email, firstName, and lastName are required'
-        });
-      }
-
-      // Email format validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid email format'
-        });
-      }
+      
 
       const result = await sendWelcomeEmail({
         email,
-        firstName,
-        lastName
+        username
       });
 
       if (result.success) {
@@ -161,29 +145,13 @@ class NotificationController {
   // Send login notification email (can be called directly)
   static async sendLoginNotification(req, res) {
     try {
-      const { email, firstName, lastName } = req.body;
+      const { email, username } = req.body;
 
-      // Validation
-      if (!email || !firstName || !lastName) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email, firstName, and lastName are required'
-        });
-      }
-
-      // Email format validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid email format'
-        });
-      }
+      
 
       const result = await sendLoginNotificationEmail({
         email,
-        firstName,
-        lastName
+        username,
       });
 
       if (result.success) {

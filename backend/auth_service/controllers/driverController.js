@@ -98,6 +98,7 @@ class DriverController {
         await publishUserRegistrationEvent({
           userId: newUser.id,
           email: newUser.email,
+          username: newUser.username,
           fullName: driverProfile.full_name,
           userType: 'driver'
         });
@@ -105,6 +106,7 @@ class DriverController {
         await publishAuthEvent({
           userId: newUser.id,
           email: newUser.email,
+          username: newUser.username,
           fullName: driverProfile.full_name,
           userType: 'driver',
           action: 'signup'

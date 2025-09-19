@@ -27,15 +27,15 @@ const validateEmailRequest = (req, res, next) => {
 };
 
 const validateWelcomeEmailRequest = (req, res, next) => {
-  const { email, firstName, lastName } = req.body;
-  
-  if (!email || !firstName || !lastName) {
+  const { email, username } = req.body;
+
+  if (!email) {
     return res.status(400).json({
       success: false,
-      message: 'Email, firstName, and lastName are required'
+      message: 'Email is required'
     });
   }
-  
+
   // Basic email validation
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
@@ -44,15 +44,7 @@ const validateWelcomeEmailRequest = (req, res, next) => {
       message: 'Please provide a valid email address'
     });
   }
-  
-  // Name validation
-  if (firstName.trim().length < 1 || lastName.trim().length < 1) {
-    return res.status(400).json({
-      success: false,
-      message: 'First name and last name cannot be empty'
-    });
-  }
-  
+
   next();
 };
 
@@ -127,8 +119,7 @@ router.get('/docs', (req, res) => {
             subject: 'string (required) - Email subject',
             message: 'string (required) - Email message content',
             type: 'string (optional) - Notification type',
-            firstName: 'string (optional) - Recipient first name',
-            lastName: 'string (optional) - Recipient last name'
+            username: 'string (optional) - Recipient username'
           },
           rateLimit: '5 requests per 15 minutes'
         },
@@ -138,8 +129,7 @@ router.get('/docs', (req, res) => {
           description: 'Send a welcome email using predefined template',
           parameters: {
             email: 'string (required) - Recipient email address',
-            firstName: 'string (required) - Recipient first name',
-            lastName: 'string (required) - Recipient last name'
+            username: 'string (required) - Recipient username',
           },
           rateLimit: '10 requests per 15 minutes'
         },
@@ -149,8 +139,7 @@ router.get('/docs', (req, res) => {
           description: 'Send a login notification email',
           parameters: {
             email: 'string (required) - Recipient email address',
-            firstName: 'string (required) - Recipient first name',
-            lastName: 'string (required) - Recipient last name'
+            username: 'string (required) - Recipient username',
           },
           rateLimit: '10 requests per 15 minutes'
         },

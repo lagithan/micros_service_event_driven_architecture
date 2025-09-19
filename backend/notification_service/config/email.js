@@ -65,8 +65,9 @@ const sendEmail = async (mailOptions) => {
 
 // Send welcome email
 const sendWelcomeEmail = async (userData) => {
-  const { email, firstName, lastName } = userData;
-  
+  const { email, username } = userData;
+  const displayName = username || (email && email.split('@')[0]) || 'User';
+
   const mailOptions = {
     to: email,
     subject: 'Welcome to Swift Track!',
@@ -77,7 +78,7 @@ const sendWelcomeEmail = async (userData) => {
         </div>
         
         <div style="padding: 30px; background-color: #f9f9f9;">
-          <h2 style="color: #333;">Hello ${firstName} ${lastName}!</h2>
+          <h2 style="color: #333;">Hello ${displayName}!</h2>
           
           <p style="color: #666; line-height: 1.6; font-size: 16px;">
             Thank you for joining our platform. We're excited to have you on board!
@@ -87,6 +88,7 @@ const sendWelcomeEmail = async (userData) => {
             <h3 style="color: #333; margin-top: 0;">Your Account Details:</h3>
             <ul style="color: #666; line-height: 1.8;">
               <li><strong>Email:</strong> ${email}</li>
+              <li><strong>Username:</strong> ${username || ''}</li>
               <li><strong>Registration Date:</strong> ${new Date().toLocaleDateString()}</li>
               <li><strong>Account Status:</strong> Active</li>
             </ul>
@@ -96,7 +98,6 @@ const sendWelcomeEmail = async (userData) => {
             You can now access all the features of our platform. If you have any questions or need assistance, 
             feel free to reach out to our support team.
           </p>
-          
           
         </div>
         
@@ -111,12 +112,13 @@ const sendWelcomeEmail = async (userData) => {
     text: `
       Welcome to Swift Track!
 
-      Hello ${firstName} ${lastName}!
+      Hello ${displayName}!
       
       Thank you for joining our platform. We're excited to have you on board!
       
       Your Account Details:
       - Email: ${email}
+      - Username: ${username || ''}
       - Registration Date: ${new Date().toLocaleDateString()}
       - Account Status: Active
       
@@ -133,8 +135,9 @@ const sendWelcomeEmail = async (userData) => {
 
 // Send login notification email
 const sendLoginNotificationEmail = async (userData) => {
-  const { email, firstName, lastName } = userData;
-  
+  const { email, username } = userData;
+  const displayName = username || (email && email.split('@')[0]) || 'User';
+
   const mailOptions = {
     to: email,
     subject: 'New Login to Your Account',
@@ -145,7 +148,7 @@ const sendLoginNotificationEmail = async (userData) => {
         </div>
         
         <div style="padding: 30px; background-color: #f9f9f9;">
-          <h2 style="color: #333;">Hello ${firstName}!</h2>
+          <h2 style="color: #333;">Hello ${displayName}!</h2>
           
           <p style="color: #666; line-height: 1.6; font-size: 16px;">
             We detected a new login to your account. Here are the details:
@@ -155,6 +158,7 @@ const sendLoginNotificationEmail = async (userData) => {
             <h3 style="color: #333; margin-top: 0;">Login Details:</h3>
             <ul style="color: #666; line-height: 1.8;">
               <li><strong>Email:</strong> ${email}</li>
+              <li><strong>Username:</strong> ${username || ''}</li>
               <li><strong>Time:</strong> ${new Date().toLocaleString()}</li>
               <li><strong>Status:</strong> Successful</li>
             </ul>
@@ -182,12 +186,13 @@ const sendLoginNotificationEmail = async (userData) => {
     text: `
       Login Alert
       
-      Hello ${firstName}!
+      Hello ${displayName}!
       
       We detected a new login to your account. Here are the details:
       
       Login Details:
       - Email: ${email}
+      - Username: ${username || ''}
       - Time: ${new Date().toLocaleString()}
       - Status: Successful
       
