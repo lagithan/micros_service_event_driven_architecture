@@ -710,6 +710,31 @@ class DeliveryController {
 
         console.log('✅ Order assigned successfully:', assignmentResult);
 
+        // Get route from ROS adapter service for pickup
+        let routeData = null;
+        try {
+          console.log('🗺️ Requesting pickup route from ROS adapter service...');
+          const axios = require('axios');
+          const rosAdapterUrl = process.env.ROS_ADAPTER_URL || 'http://localhost:5006';
+
+          // Get the pickup address from order details
+          const address = orderDetails?.pickup_address || orderDetails?.destination_address || 'Default Pickup Address';
+
+          const routeResponse = await axios.post(`${rosAdapterUrl}/api/ros/route`, {
+            address: address
+          }, {
+            timeout: 5000
+          });
+
+          if (routeResponse.data.success) {
+            routeData = routeResponse.data;
+            console.log('✅ Pickup route data received from ROS adapter:', routeData);
+          }
+        } catch (rosError) {
+          console.warn('⚠️ Failed to get pickup route from ROS adapter service:', rosError.message);
+          // Continue without route data - service should still work
+        }
+
         // Publish event if Kafka is available
         try {
           await publishDeliveryCreatedEvent({
@@ -734,6 +759,7 @@ class DeliveryController {
             deliveryPersonName: assignmentResult.deliveryRecord.delivery_person_name,
             deliveryStatus: assignmentResult.deliveryRecord.delivery_status,
             assignedAt: assignmentResult.deliveryRecord.created_at,
+            routeData: routeData,
             orderUpdate: {
               order_id: assignmentResult.orderUpdate.order_id,
               order_status: assignmentResult.orderUpdate.order_status,
@@ -789,10 +815,37 @@ class DeliveryController {
         status,
         deliveryPersonId
       });
-      
+
       const result = await DeliveryModel.updateOrderDeliveryStatus(orderId, status, deliveryPersonId);
 
       console.log('✅ Status updated successfully:', result);
+
+      // Get route from ROS adapter service for pickup/delivery statuses
+      let routeData = null;
+      if (status === 'Selected_for_pickup' || status === 'Pickedup_from_warehouse') {
+        try {
+          console.log('🗺️ Requesting route from ROS adapter service...');
+          const axios = require('axios');
+          const rosAdapterUrl = process.env.ROS_ADAPTER_URL || 'http://localhost:5006';
+
+          // Get the delivery address from order record
+          const address = result.orderRecord?.destination_address || result.orderRecord?.pickup_address || 'Default Address';
+
+          const routeResponse = await axios.post(`${rosAdapterUrl}/api/ros/route`, {
+            address: address
+          }, {
+            timeout: 5000
+          });
+
+          if (routeResponse.data.success) {
+            routeData = routeResponse.data;
+            console.log('✅ Route data received from ROS adapter:', routeData);
+          }
+        } catch (rosError) {
+          console.warn('⚠️ Failed to get route from ROS adapter service:', rosError.message);
+          // Continue without route data - service should still work
+        }
+      }
 
       // Publish delivery status updated event to Kafka
       try {
@@ -819,6 +872,7 @@ class DeliveryController {
           newStatus: status,
           deliveryRecord: result.deliveryRecord,
           orderRecord: result.orderRecord,
+          routeData: routeData,
           updatedAt: new Date().toISOString()
         }
       });

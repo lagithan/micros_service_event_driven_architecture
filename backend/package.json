@@ -3,17 +3,16 @@
   "version": "1.0.0",
   "description": "Microservices architecture with Express.js",
   "scripts": {
-    "install:all": "npm-run-all install:*",
+    "install:all": "npm run install:auth && npm run install:notification && npm run install:api && npm run install:order && npm run install:delivery && npm run install:warehouse && npm run install:client",
     "install:auth": "npm install --prefix auth_service",
     "install:notification": "npm install --prefix notification_service",
     "install:api": "npm install --prefix api_gateway",
     "install:order": "npm install --prefix order_service",
     "install:delivery": "npm install --prefix delivery_service",
     "install:warehouse": "npm install --prefix warehouse_adapter_service",
-
-    "dev": "concurrently \"npm run dev --prefix auth_service\" \"npm run dev --prefix notification_service\" \"npm run dev --prefix api_gateway\" \"npm run dev --prefix order_service\" \"npm run dev --prefix delivery_service\" \"npm run dev --prefix warehouse_adapter_service\"",
-
-    "start": "concurrently \"npm start --prefix auth_service\" \"npm start --prefix notification_service\" \"npm start --prefix api_gateway\" \"npm start --prefix order_service\" \"npm start --prefix delivery_service\" \"npm start --prefix warehouse_adapter_service\""
+    "install:client": "npm install --prefix client_management_adapter_service",
+    "dev": "concurrently \"npm run dev --prefix auth_service\" \"npm run dev --prefix notification_service\" \"npm run dev --prefix api_gateway\" \"npm run dev --prefix order_service\" \"npm run dev --prefix delivery_service\" \"npm run dev --prefix warehouse_adapter_service\" \"npm run dev --prefix client_management_adapter_service\"",
+    "start": "concurrently \"npm start --prefix auth_service\" \"npm start --prefix notification_service\" \"npm start --prefix api_gateway\" \"npm start --prefix order_service\" \"npm start --prefix delivery_service\" \"npm start --prefix warehouse_adapter_service\" \"npm start --prefix client_management_adapter_service\""
   },
   "keywords": ["microservices", "express", "kafka", "supabase"],
   "author": "Your Name",

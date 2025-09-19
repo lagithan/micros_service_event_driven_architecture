@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import CreateOrderModal from '@/components/orders/CreateOrderModal'
+import OrderDetailModal from '@/components/orders/OrderDetailModal'
 import OrdersTable from '@/components/orders/OrdersTable'
 import { 
   Truck, 
@@ -39,6 +40,8 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const [selectedTab, setSelectedTab] = useState("orders")
   const [createOrderOpen, setCreateOrderOpen] = useState(false)
+  const [orderDetailOpen, setOrderDetailOpen] = useState(false)
+  const [selectedOrder, setSelectedOrder] = useState<OrderData | null>(null)
   const [orders, setOrders] = useState([])
   const [isLoadingOrders, setIsLoadingOrders] = useState(true)
   const [orderError, setOrderError] = useState<string | null>(null)
@@ -200,7 +203,8 @@ export default function Dashboard() {
 
   const handleOrderView = (order: OrderData) => {
     console.log('View order:', order)
-    // TODO: Implement order detail modal
+    setSelectedOrder(order)
+    setOrderDetailOpen(true)
   }
 
   const handleRefreshOrders = () => {
@@ -364,6 +368,12 @@ export default function Dashboard() {
         open={createOrderOpen}
         onOpenChange={setCreateOrderOpen}
         onOrderCreate={handleCreateOrder}
+      />
+
+      <OrderDetailModal
+        open={orderDetailOpen}
+        onOpenChange={setOrderDetailOpen}
+        order={selectedOrder}
       />
     </div>
   )

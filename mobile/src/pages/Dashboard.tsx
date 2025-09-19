@@ -3,10 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Package, CheckCircle, User, Truck, RefreshCw, Loader2 } from "lucide-react";
+import { Package, CheckCircle, User, Truck, RefreshCw, Loader2, Navigation } from "lucide-react";
 import DeliveryCard from "@/components/DeliveryCard";
 import StatusBadge from "@/components/StatusBadge";
 import ProofOfDeliveryModal from "@/components/ProofOfDeliveryModal";
+import RouteDisplay from "@/components/RouteDisplay";
 import { useToast } from "@/hooks/use-toast";
 import { DeliveryService, TokenManager, DeliveryOrder } from "@/lib/api";
 
@@ -31,6 +32,16 @@ interface Delivery {
   createdAt?: string;
   updatedAt?: string;
   cashPaid?: boolean;
+}
+
+interface RouteData {
+  success: boolean;
+  address: string;
+  route: string;
+  estimatedTime: string;
+  distance: string;
+  instructions: string[];
+  timestamp: string;
 }
 
 // Interface for backend delivery data from getMyDeliveries API
@@ -133,6 +144,12 @@ const Dashboard = () => {
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
   const [proofModalOpen, setProofModalOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+
+  // Route state
+  const [routeData, setRouteData] = useState<{ [deliveryId: string]: RouteData }>({});
+  const [loadingRoute, setLoadingRoute] = useState<{ [deliveryId: string]: boolean }>({});
+  const [routeError, setRouteError] = useState<{ [deliveryId: string]: string }>({});
+  const [showRoute, setShowRoute] = useState<{ [deliveryId: string]: boolean }>({});
 
   // Check authentication
   useEffect(() => {
@@ -284,6 +301,70 @@ const Dashboard = () => {
   const refreshDeliveries = async () => {
     setIsRefreshing(true);
     await fetchAllData();
+  };
+
+  // Fetch route from ROS adapter service
+  const fetchRoute = async (deliveryId: string, address: string, scenario: 'client' | 'warehouse' = 'warehouse') => {
+    setLoadingRoute(prev => ({ ...prev, [deliveryId]: true }));
+    setRouteError(prev => ({ ...prev, [deliveryId]: '' }));
+
+    try {
+      console.log('🗺️ Fetching route for:', { deliveryId, address, scenario });
+
+      // Call the ROS adapter service via the API gateway
+      const response = await fetch("http://localhost:5000/api/ros/route", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ address, scenario }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Route response:', data);
+
+      if (data.success) {
+        setRouteData(prev => ({ ...prev, [deliveryId]: data }));
+        setShowRoute(prev => ({ ...prev, [deliveryId]: true }));
+        toast({
+          title: "Route Generated",
+          description: `Route for ${address} is ready`,
+        });
+      } else {
+        const errorMsg = data.message || "Failed to get route";
+        setRouteError(prev => ({ ...prev, [deliveryId]: errorMsg }));
+        toast({
+          title: "Route Error",
+          description: errorMsg,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error fetching route:', error);
+      const errorMsg = error instanceof Error ? error.message : "Failed to fetch route";
+      setRouteError(prev => ({ ...prev, [deliveryId]: errorMsg }));
+      toast({
+        title: "Connection Error",
+        description: "Unable to fetch route. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingRoute(prev => ({ ...prev, [deliveryId]: false }));
+    }
+  };
+
+  // Hide route display
+  const hideRoute = (deliveryId: string) => {
+    setShowRoute(prev => ({ ...prev, [deliveryId]: false }));
+  };
+
+  // Refresh route
+  const refreshRoute = (deliveryId: string, address: string, scenario: 'client' | 'warehouse' = 'warehouse') => {
+    fetchRoute(deliveryId, address, scenario);
   };
 
   const selectDeliveries = availableOrders; // Use available orders for selection
@@ -616,16 +697,51 @@ const Dashboard = () => {
 
                     <Separator />
 
-                    {/* Action Button */}
-                    <div className="pt-2">
-                      <Button 
-                        onClick={() => handleSelectForPickup(delivery.id)} 
+                    {/* Action Buttons */}
+                    <div className="pt-2 space-y-2">
+                      <Button
+                        onClick={() => handleSelectForPickup(delivery.id)}
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                         size="lg"
                       >
                         ✅ Select for Pickup
                       </Button>
+
+                      <Button
+                        onClick={() => fetchRoute(delivery.id, delivery.pickupAddress || delivery.deliveryAddress || delivery.address || 'Unknown Address', 'client')}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white"
+                        size="lg"
+                        variant="outline"
+                        disabled={loadingRoute[delivery.id]}
+                      >
+                        {loadingRoute[delivery.id] ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Loading Route...
+                          </>
+                        ) : (
+                          <>
+                            <Navigation className="h-4 w-4 mr-2" />
+                            Get Pickup Route
+                          </>
+                        )}
+                      </Button>
                     </div>
+
+                    {/* Route Display */}
+                    {showRoute[delivery.id] && (
+                      <div className="mt-4">
+                        <RouteDisplay
+                          routeData={routeData[delivery.id]}
+                          loading={loadingRoute[delivery.id]}
+                          error={routeError[delivery.id]}
+                          address={delivery.pickupAddress || delivery.deliveryAddress || delivery.address}
+                          onRefresh={() => refreshRoute(delivery.id, delivery.pickupAddress || delivery.deliveryAddress || delivery.address || 'Unknown Address', 'client')}
+                          onClose={() => hideRoute(delivery.id)}
+                          title="Pickup Route"
+                        />
+                      </div>
+                    )}
 
                     {/* Estimated Delivery Time */}
                     {delivery.estimatedDeliveryDate && (
@@ -823,12 +939,48 @@ const Dashboard = () => {
                       </div>
                     )}
 
-                    <Button 
-                      onClick={() => handlePickupFromWarehouse(delivery.id)} 
-                      className="w-full bg-blue-600 hover:bg-blue-700"
-                    >
-                      � Pickup from Warehouse
-                    </Button>
+                    <div className="space-y-2">
+                      <Button
+                        onClick={() => fetchRoute(delivery.id, delivery.deliveryAddress || delivery.address || 'Unknown Address', 'warehouse')}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white"
+                        variant="outline"
+                        disabled={loadingRoute[delivery.id]}
+                      >
+                        {loadingRoute[delivery.id] ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Loading Route...
+                          </>
+                        ) : (
+                          <>
+                            <Navigation className="h-4 w-4 mr-2" />
+                            Get Warehouse to Delivery Route
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
+                        onClick={() => handlePickupFromWarehouse(delivery.id)}
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                      >
+                        🚚 Pickup from Warehouse
+                      </Button>
+                    </div>
+
+                    {/* Route Display for Warehouse Pickup */}
+                    {showRoute[delivery.id] && (
+                      <div className="mt-4">
+                        <RouteDisplay
+                          routeData={routeData[delivery.id]}
+                          loading={loadingRoute[delivery.id]}
+                          error={routeError[delivery.id]}
+                          address={delivery.deliveryAddress || delivery.address}
+                          onRefresh={() => refreshRoute(delivery.id, delivery.deliveryAddress || delivery.address || 'Unknown Address', 'warehouse')}
+                          onClose={() => hideRoute(delivery.id)}
+                          title="Warehouse to Delivery Route"
+                        />
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -886,13 +1038,32 @@ const Dashboard = () => {
                     )}
 
                     <div className="space-y-2">
-                      <Button 
-                        onClick={() => handleMarkDelivered(delivery)} 
+                      <Button
+                        onClick={() => fetchRoute(delivery.id, delivery.deliveryAddress || delivery.address || 'Unknown Address', 'warehouse')}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white"
+                        variant="outline"
+                        disabled={loadingRoute[delivery.id]}
+                      >
+                        {loadingRoute[delivery.id] ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Loading Route...
+                          </>
+                        ) : (
+                          <>
+                            <Navigation className="h-4 w-4 mr-2" />
+                            Get Delivery Route
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
+                        onClick={() => handleMarkDelivered(delivery)}
                         className="w-full bg-blue-600 hover:bg-blue-700"
                       >
                         ✅ Mark as Delivered
                       </Button>
-                      <Button 
+                      <Button
                         onClick={() => handleMarkAsPaid(delivery)}
                         className="w-full bg-blue-500 hover:bg-blue-600"
                         variant="outline"
@@ -900,6 +1071,21 @@ const Dashboard = () => {
                         💵 Mark as Paid
                       </Button>
                     </div>
+
+                    {/* Route Display for Delivery */}
+                    {showRoute[delivery.id] && (
+                      <div className="mt-4">
+                        <RouteDisplay
+                          routeData={routeData[delivery.id]}
+                          loading={loadingRoute[delivery.id]}
+                          error={routeError[delivery.id]}
+                          address={delivery.deliveryAddress || delivery.address}
+                          onRefresh={() => refreshRoute(delivery.id, delivery.deliveryAddress || delivery.address || 'Unknown Address', 'warehouse')}
+                          onClose={() => hideRoute(delivery.id)}
+                          title="Delivery Route"
+                        />
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
