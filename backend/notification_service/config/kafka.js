@@ -76,7 +76,7 @@ const handleAuthEvent = async (authEvent) => {
         break;
         
       case 'AUTH_SUCCESS':
-        await handleAuthSuccess(authEvent);
+          await handleAuthSuccess({ ...authEvent, username: authEvent.username });
         break;
         
       default:
@@ -92,12 +92,13 @@ const handleAuthEvent = async (authEvent) => {
 // Handle user registration event
 const handleUserRegistration = async (eventData) => {
   try {
-    const { userId, email, firstName, lastName } = eventData;
-    
+    const { userId, email, username, firstName, lastName } = eventData;
+
     console.log(`Sending welcome email to user ${userId}: ${email}`);
-    
+
     const emailResult = await sendWelcomeEmail({
       email,
+      username,
       firstName,
       lastName
     });
@@ -115,9 +116,10 @@ const handleUserRegistration = async (eventData) => {
 };
 
 // Handle authentication success event
-const handleAuthSuccess = async (eventData) => {
+const handleAuthSuccess = async (payload) => {
+  // payload expected: { userId, email, username, action }
   try {
-    const { action, userId, email, firstName, lastName } = eventData;
+    const { action, userId, email, username, firstName, lastName } = payload;
     
     if (action === 'login') {
       console.log(`Sending login notification to user ${userId}: ${email}`);
@@ -125,7 +127,8 @@ const handleAuthSuccess = async (eventData) => {
       const emailResult = await sendLoginNotificationEmail({
         email,
         firstName,
-        lastName
+        lastName,
+        username
       });
 
       if (emailResult.success) {

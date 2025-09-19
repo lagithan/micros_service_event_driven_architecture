@@ -3,14 +3,23 @@
   "version": "1.0.0",
   "description": "Microservices architecture with Express.js",
   "scripts": {
-    "install": "npm install --prefix auth_service && npm install --prefix notification_service && npm install --prefix api_gateway",
-    "dev": "concurrently \"cd auth_service && npm run dev\" \"cd notification_service && npm run dev\" \"cd api_gateway && npm run dev\"",
-    "start": "concurrently \"cd auth_service && npm start\" \"cd notification_service && npm start\" \"cd api_gateway && npm start\""
+    "install:all": "npm-run-all install:*",
+    "install:auth": "npm install --prefix auth_service",
+    "install:notification": "npm install --prefix notification_service",
+    "install:api": "npm install --prefix api_gateway",
+    "install:order": "npm install --prefix order_service",
+    "install:delivery": "npm install --prefix delivery_service",
+    "install:warehouse": "npm install --prefix warehouse_adapter_service",
+
+    "dev": "concurrently \"npm run dev --prefix auth_service\" \"npm run dev --prefix notification_service\" \"npm run dev --prefix api_gateway\" \"npm run dev --prefix order_service\" \"npm run dev --prefix delivery_service\" \"npm run dev --prefix warehouse_adapter_service\"",
+
+    "start": "concurrently \"npm start --prefix auth_service\" \"npm start --prefix notification_service\" \"npm start --prefix api_gateway\" \"npm start --prefix order_service\" \"npm start --prefix delivery_service\" \"npm start --prefix warehouse_adapter_service\""
   },
   "keywords": ["microservices", "express", "kafka", "supabase"],
   "author": "Your Name",
   "license": "ISC",
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "npm-run-all": "^4.1.5"
   }
 }

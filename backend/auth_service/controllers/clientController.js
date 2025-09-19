@@ -100,6 +100,7 @@ class ClientController {
         await publishUserRegistrationEvent({
           userId: newUser.id,
           email: newUser.email,
+          username: newUser.username,
           name: clientProfile.name,
           userType: 'client'
         });
@@ -107,6 +108,7 @@ class ClientController {
         await publishAuthEvent({
           userId: newUser.id,
           email: newUser.email,
+          username: newUser.username,
           name: clientProfile.name,
           userType: 'client',
           action: 'signup'

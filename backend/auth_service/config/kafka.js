@@ -36,6 +36,7 @@ const publishAuthEvent = async (eventData) => {
           eventType: 'AUTH_SUCCESS',
           userId: eventData.userId,
           email: eventData.email,
+          username: eventData.username || eventData.name || eventData.fullName || null,
           firstName: eventData.firstName,
           lastName: eventData.lastName,
           action: eventData.action, // 'login' or 'signup'
@@ -66,6 +67,7 @@ const publishUserRegistrationEvent = async (userData) => {
           eventType: 'USER_REGISTERED',
           userId: userData.userId,
           email: userData.email,
+          username: userData.username || userData.name || userData.fullName || null,
           firstName: userData.firstName,
           lastName: userData.lastName,
           timestamp: new Date().toISOString(),

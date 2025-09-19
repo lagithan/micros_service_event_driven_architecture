@@ -237,6 +237,65 @@ class DeliveryController {
           console.warn('⚠️  Failed to publish delivery status updated event to Kafka:', kafkaError.message);
         }
 
+        // If delivered, notify the client by calling notification service
+        try {
+          if (updatedDelivery.delivery_status === 'Delivered') {
+            const axios = require('axios');
+
+            // Fetch order + delivery details to get client identifiers
+            const orderDetails = await DeliveryModel.getOrderWithDeliveryDetails(orderId);
+
+            let to = null;
+            let recipientUsername = null;
+
+            // Prefer fetching email/username from auth service using userId or clientId
+            const authBase = process.env.AUTH_SERVICE_URL || 'http://localhost:5001';
+            try {
+              if (orderDetails?.user_id) {
+                const resp = await axios.post(`${authBase}/api/auth/profile`, { userId: orderDetails.user_id }, { timeout: 5000 });
+                const user = resp.data?.data?.user;
+                if (user) {
+                  to = user.email || to;
+                  recipientUsername = user.username || recipientUsername;
+                }
+              } else if (orderDetails?.client_id) {
+                const resp = await axios.post(`${authBase}/api/client/profile`, { userId: orderDetails.client_id }, { timeout: 5000 });
+                const user = resp.data?.data?.user;
+                if (user) {
+                  to = user.email || to;
+                  recipientUsername = user.username || recipientUsername;
+                }
+              }
+            } catch (profileErr) {
+              console.warn('Could not fetch user profile from auth service:', profileErr.message || profileErr);
+            }
+
+            // Fallback: try receiver_name/phone fields (email unknown)
+            if (!to && orderDetails) {
+              // If the order table stored an email under a common name, try it
+              to = orderDetails.receiver_email || orderDetails.client_email || orderDetails.email || null;
+            }
+
+            if (to) {
+              const subject = 'Your order has been delivered';
+              const message = `Hello ${recipientUsername || orderDetails?.receiver_name || 'Customer'},\n\nYour order ${orderId} has been delivered successfully. Thank you for using our service.`;
+
+              const notifyUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5002/api/send-notification';
+
+              try {
+                await axios.post(notifyUrl, { to, subject, message, username: recipientUsername }, { timeout: 5000 });
+                console.log(`Notification sent to ${to} for delivered order ${orderId}`);
+              } catch (err) {
+                console.warn(`Failed to send delivery notification to ${to}:`, err.message || err);
+              }
+            } else {
+              console.warn('Recipient email not found for order', orderId);
+            }
+          }
+        } catch (notifyError) {
+          console.error('Error while sending delivery notification:', notifyError);
+        }
+
       } catch (dbError) {
         console.error('Database error during status update:', dbError.message);
 
